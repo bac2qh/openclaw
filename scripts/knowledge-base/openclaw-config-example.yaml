@@ -1,0 +1,78 @@
+# OpenClaw Configuration for Personal Knowledge Base
+#
+# This is an example configuration file.
+# Apply these settings with: openclaw config set <key> <value>
+#
+# Or copy relevant sections to: ~/.openclaw/config.yaml
+
+# LLM Provider
+providers:
+  anthropic:
+    apiKey: "sk-ant-api03-..."  # Your Anthropic API key
+
+  # For embeddings (memory search)
+  openai:
+    apiKey: "sk-..."  # Your OpenAI API key
+
+  # Alternative transcription providers
+  deepgram:
+    apiKey: ""  # Optional: for better meeting transcription
+
+  groq:
+    apiKey: ""  # Optional: fast + free tier
+
+# Agent Defaults
+agents:
+  defaults:
+    # Use Claude Sonnet 4
+    model: "claude-sonnet-4-20250514"
+
+    # Memory Search
+    memorySearch:
+      enabled: true
+      provider: "openai"  # For embeddings
+      # Additional paths to index
+      extraPaths:
+        - "/mnt/transcripts"
+
+# Channels
+channels:
+  telegram:
+    token: "YOUR_BOT_TOKEN"  # From @BotFather
+    allowlist:
+      - "YOUR_TELEGRAM_USER_ID"  # From @userinfobot
+    mediaMaxMb: 20  # Max file size to download
+
+# Voice/Audio Transcription
+tools:
+  media:
+    audio:
+      enabled: true
+      maxBytes: 26214400  # 25MB
+      timeoutSeconds: 120  # 2 min timeout
+      language: "en"
+
+      # Provider priority (first available used)
+      models:
+        - provider: "openai"
+          model: "gpt-4o-mini-transcribe"
+        # Uncomment to use Deepgram (better for meetings)
+        # - provider: "deepgram"
+        #   model: "nova-3"
+
+      # Provider-specific options
+      providerOptions:
+        deepgram:
+          punctuate: true
+          smart_format: true
+          diarize: true  # Speaker labels
+
+# Cron (for reminders)
+cron:
+  enabled: true
+
+# Gateway
+gateway:
+  mode: "local"
+  # bind: "loopback"  # Default: only local connections
+  # port: 18789      # Default port
