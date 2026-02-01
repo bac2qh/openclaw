@@ -1,0 +1,33 @@
+# Lume VM Configuration for OpenClaw Memory System
+#
+# This is an example configuration file for the Lume VM.
+# Copy to: ~/.lume/vms/memory-app/config.yaml
+#
+# Replace YOUR_USERNAME with your actual macOS username.
+
+# VM Resources
+cpu: 4
+memory: 8192  # MB
+disk: 50G
+
+# Operating System
+os: ubuntu
+# Alternative: os: macos
+
+# Shared Directories (VirtioFS)
+shared_directories:
+  # Transcripts from host
+  - host_path: /Users/YOUR_USERNAME/transcripts
+    guest_path: /mnt/transcripts
+    read_only: false
+
+  # Optional: Share Documents folder
+  # - host_path: /Users/YOUR_USERNAME/Documents
+  #   guest_path: /mnt/documents
+  #   read_only: true
+
+# Network
+# Default: NAT networking (VM can access internet)
+
+# Display (optional, for GUI)
+# display: false
