@@ -20,17 +20,17 @@ fi
 echo "Installing ffmpeg..."
 brew install ffmpeg
 
-# Install mlx-whisper
-echo "Installing mlx-whisper..."
-pip install mlx-whisper
+# Install mlx-audio
+echo "Installing mlx-audio..."
+pip install mlx-audio
 
-# Test mlx-whisper
-echo "Testing mlx-whisper installation..."
-if command -v mlx_whisper &> /dev/null; then
-    echo "  ✓ mlx-whisper installed successfully"
-    echo "  Note: Model will auto-download on first use (~3GB)"
+# Test mlx-audio
+echo "Testing mlx-audio installation..."
+if python -c "import mlx_audio" 2>/dev/null; then
+    echo "  ✓ mlx-audio installed successfully"
+    echo "  Note: VibeVoice-ASR model will auto-download on first use (~2GB)"
 else
-    echo "  ⚠ mlx-whisper not found in PATH. You may need to:"
+    echo "  ⚠ mlx-audio not found. You may need to:"
     echo "    export PATH=\"\$HOME/Library/Python/3.x/bin:\$PATH\""
 fi
 
@@ -53,29 +53,6 @@ if [ -f "$SCRIPT_DIR/diarize.py" ]; then
     cp "$SCRIPT_DIR/diarize.py" ~/scripts/
     chmod +x ~/scripts/diarize.py
     echo "Installed diarize.py to ~/scripts/"
-fi
-
-# Setup pyannote (optional)
-echo ""
-echo "=== pyannote Setup (Optional) ==="
-read -p "Install pyannote for speaker diarization? [y/N] " -n 1 -r
-echo ""
-if [[ $REPLY =~ ^[Yy]$ ]]; then
-    echo "Creating Python virtual environment..."
-    python3 -m venv ~/diarize-env
-    source ~/diarize-env/bin/activate
-
-    echo "Installing pyannote.audio..."
-    pip install pyannote.audio torch torchaudio
-
-    echo ""
-    echo "pyannote installed. You need to:"
-    echo "1. Create Hugging Face account: https://huggingface.co/"
-    echo "2. Accept model terms:"
-    echo "   - https://huggingface.co/pyannote/speaker-diarization-3.1"
-    echo "   - https://huggingface.co/pyannote/segmentation-3.0"
-    echo "3. Create token: https://huggingface.co/settings/tokens"
-    echo "4. Set environment variable: export HF_TOKEN='hf_...'"
 fi
 
 # Install Lume (optional)

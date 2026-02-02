@@ -1,6 +1,6 @@
 # Personal Knowledge Base with OpenClaw
 
-Build a voice-powered memory system using OpenClaw, mlx-whisper, pyannote, Lume VM, and Claude Sonnet 4.
+Build a voice-powered memory system using OpenClaw, mlx-audio (VibeVoice), Lume VM, and Claude Sonnet 4.
 
 ## Quick Start
 
@@ -22,12 +22,12 @@ Build a voice-powered memory system using OpenClaw, mlx-whisper, pyannote, Lume 
 │ M1 Pro Mac (Host)                                               │
 │                                                                 │
 │  ┌─────────────────┐     ┌─────────────────────────────────┐   │
-│  │ mlx-whisper     │     │ ~/transcripts/ (shared folder)  │   │
-│  │ (Apple MLX)     │ ──→ │ ├── meeting-2024-01-15.txt      │   │
-│  ├─────────────────┤     │ └── meeting-2024-01-16.txt      │   │
-│  │ pyannote        │     └───────────────┬─────────────────┘   │
-│  │ (diarization)   │                     │ VirtioFS            │
-│  └─────────────────┘                     │                     │
+│  │ mlx-audio       │     │ ~/transcripts/ (shared folder)  │   │
+│  │ VibeVoice-ASR   │ ──→ │ ├── meeting-2024-01-15.json     │   │
+│  │ (transcription  │     │ └── meeting-2024-01-16.json     │   │
+│  │  + diarization) │     └───────────────┬─────────────────┘   │
+│  └─────────────────┘                     │ VirtioFS            │
+│                                          │                     │
 │  ┌───────────────────────────────────────┼─────────────────┐   │
 │  │ Lume VM                               ↓                 │   │
 │  │                     /mnt/transcripts/ (mounted)         │   │
@@ -68,105 +68,59 @@ brew install lume
 lume --version
 ```
 
-### 1.2 Install mlx-whisper (Transcription)
+### 1.2 Install mlx-audio with VibeVoice (Transcription + Diarization)
 
-mlx-whisper uses Apple's MLX framework for native M1/M2/M3 GPU acceleration.
+mlx-audio with Microsoft's VibeVoice-ASR provides both transcription AND speaker diarization in one model, running natively on M1/M2/M3 via Apple's MLX framework.
 
 ```bash
 # Install ffmpeg (required for audio conversion)
 brew install ffmpeg
 
-# Install mlx-whisper
-pip install mlx-whisper
+# Install mlx-audio
+pip install mlx-audio
 
 # Test it works
-say "Hello, this is a test." -o /tmp/test.aiff
-mlx_whisper /tmp/test.aiff --model mlx-community/whisper-large-v3-mlx
+say "Hello, this is a test of the transcription system." -o /tmp/test.aiff
+python -m mlx_audio.stt.generate \
+    --model mlx-community/VibeVoice-ASR-bf16 \
+    --audio /tmp/test.aiff \
+    --format json \
+    --max-tokens 8192
 ```
 
 **Expected output:**
-Creates `/tmp/test.txt` with transcription.
+JSON with transcription, timestamps, and speaker labels.
 
-**Available models (from mlx-community on Hugging Face):**
+**Why VibeVoice?**
+- Transcription + speaker diarization in one model (no separate pyannote needed)
+- Timestamps for each segment
+- Optimized for long-form audio (meetings)
+- Runs 100% locally on Apple Silicon
 
-| Model | Size | Use Case |
-|-------|------|----------|
-| `mlx-community/whisper-large-v3-mlx` | ~3GB | **Best accuracy** (recommended) |
-| `mlx-community/whisper-large-v3-turbo` | ~1.6GB | Fast + good accuracy |
-| `mlx-community/whisper-medium-mlx` | ~1.5GB | Balanced |
-| `mlx-community/whisper-small-mlx` | ~500MB | Quick tests |
+**Python API example:**
 
-### 1.3 Install pyannote (Speaker Diarization)
+```python
+from mlx_audio.stt.utils import load
 
-pyannote identifies who spoke when in meetings.
+model = load("mlx-community/VibeVoice-ASR-bf16")
+result = model.generate(audio="meeting.wav", max_tokens=8192, temperature=0.0)
 
-```bash
-# Create virtual environment
-python3 -m venv ~/diarize-env
-source ~/diarize-env/bin/activate
-
-# Install dependencies
-pip install pyannote.audio torch torchaudio
-
-# Verify
-python -c "from pyannote.audio import Pipeline; print('pyannote OK')"
+# Access parsed segments with timing and speakers
+for seg in result.segments:
+    print(f"[{seg['start_time']:.1f}-{seg['end_time']:.1f}] Speaker {seg['speaker_id']}: {seg['text']}")
 ```
 
-**Hugging Face Setup (required):**
+### 1.3 Install Transcription Script
 
-1. Create account: https://huggingface.co/
-2. Accept model terms:
-   - https://huggingface.co/pyannote/speaker-diarization-3.1
-   - https://huggingface.co/pyannote/segmentation-3.0
-3. Create token: https://huggingface.co/settings/tokens (Read access)
-4. Save token: `export HF_TOKEN="hf_your_token_here"`
-
-### 1.4 Install Diarization Script
-
-Copy the script from `scripts/knowledge-base/diarize.py` to `~/scripts/`:
+Copy the transcription script:
 
 ```bash
 mkdir -p ~/scripts
-cp scripts/knowledge-base/diarize.py ~/scripts/
-chmod +x ~/scripts/diarize.py
-```
-
-Test it:
-```bash
-# Create test audio
-say "Hello, this is speaker one. And this is speaker two." -o /tmp/test.aiff
-
-# Run diarization
-export HF_TOKEN="hf_your_token_here"
-source ~/diarize-env/bin/activate
-python ~/scripts/diarize.py /tmp/test.aiff
-```
-
-**Expected output:**
-```
-[0.0s - 2.5s] SPEAKER_00
-[2.5s - 5.0s] SPEAKER_01
-```
-
-### 1.5 Install Transcription Script
-
-Copy the combined script:
-
-```bash
 cp scripts/knowledge-base/transcribe.sh ~/scripts/
 chmod +x ~/scripts/transcribe.sh
 ```
 
-Edit the script to set your HF token:
-```bash
-# Open in editor
-nano ~/scripts/transcribe.sh
-
-# Or use sed
-sed -i '' 's/hf_your_token_here/YOUR_ACTUAL_TOKEN/g' ~/scripts/transcribe.sh
-```
-
-### 1.6 Create Directories
+### 1.4 Create Directories
 
 ```bash
 mkdir -p ~/audio-inbox      # Drop recordings here
@@ -174,7 +128,7 @@ mkdir -p ~/transcripts      # Output (shared with VM)
 mkdir -p ~/audio-archive    # Processed files
 ```
 
-### 1.7 Test the Transcription Pipeline
+### 1.5 Test the Transcription Pipeline
 
 ```bash
 # Create test recording
@@ -185,11 +139,12 @@ say "Hello, this is a test of the transcription system." -o ~/audio-inbox/test.a
 
 # Check output
 ls ~/transcripts/
-cat ~/transcripts/*test*.txt
-cat ~/transcripts/*test*.speakers.txt
+cat ~/transcripts/*test*.json
 ```
 
-### 1.8 Auto-Transcribe with launchd (Optional)
+**Expected output:** JSON file with transcription, timestamps, and speaker labels.
+
+### 1.6 Auto-Transcribe with launchd (Optional)
 
 Create `~/Library/LaunchAgents/com.user.transcribe.plist`:
 
@@ -213,8 +168,6 @@ Create `~/Library/LaunchAgents/com.user.transcribe.plist`:
     <dict>
         <key>PATH</key>
         <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
-        <key>HF_TOKEN</key>
-        <string>hf_your_token_here</string>
     </dict>
     <key>StandardOutPath</key>
     <string>/tmp/transcribe.log</string>
@@ -224,7 +177,7 @@ Create `~/Library/LaunchAgents/com.user.transcribe.plist`:
 </plist>
 ```
 
-Replace `YOUR_USERNAME` and `hf_your_token_here`, then load:
+Replace `YOUR_USERNAME`, then load:
 
 ```bash
 launchctl load ~/Library/LaunchAgents/com.user.transcribe.plist
@@ -585,7 +538,7 @@ openclaw cron remove <job-id>
 
 - Voice memos: 20/day × 1 min = 600 min/month
 - Meetings: 3/week × 1 hour = 720 min/month
-- Long recordings (host): 2/month × 2 hours = free (mlx-whisper)
+- Long recordings (host): 2/month × 2 hours = free (mlx-audio)
 - LLM queries: ~40/day × ~30K tokens = 1.2M tokens/month
 
 ### Alternative Options
@@ -595,9 +548,9 @@ openclaw cron remove <job-id>
 - Pros: Simpler, no local processing
 - Cons: $4/month more expensive
 
-**Option B: Hybrid (Telegram + host mlx-whisper)**
+**Option B: Hybrid (Telegram + host mlx-audio)**
 - Total: ~$8/month
-- Pros: Cheapest, privacy
+- Pros: Cheapest, privacy, built-in diarization
 - Cons: Manual workflow for long meetings
 
 **Option C: Groq free tier**
@@ -684,46 +637,33 @@ lume restart memory-app
 
 ## Troubleshooting
 
-### mlx-whisper Issues
+### mlx-audio Issues
 
 **Model not downloading:**
 ```bash
 # Models auto-download from Hugging Face on first use
 # If issues, try explicit download:
 pip install huggingface_hub
-huggingface-cli download mlx-community/whisper-large-v3-mlx
+huggingface-cli download mlx-community/VibeVoice-ASR-bf16
 ```
 
 **Slow transcription:**
 - Ensure you're on Apple Silicon (M1/M2/M3)
 - Check Activity Monitor → GPU usage
-- Try smaller model: `mlx-community/whisper-large-v3-turbo`
+- Increase `--max-tokens` parameter (default 8192)
 
 **ImportError or pip issues:**
 ```bash
 # Use a virtual environment
 python3 -m venv ~/mlx-env
 source ~/mlx-env/bin/activate
-pip install mlx-whisper
+pip install mlx-audio
 ```
 
-### pyannote Issues
-
-**Authentication error:**
-```bash
-# Verify token
-echo $HF_TOKEN
-
-# Check model access on Hugging Face
-# Ensure you accepted terms for both models
-```
-
-**ImportError:**
-```bash
-# Reinstall
-source ~/diarize-env/bin/activate
-pip install --upgrade pyannote.audio torch torchaudio
-```
+**Hallucination / repetitive output:**
+- VibeVoice is generally more robust than Whisper
+- Try adjusting `--temperature` (use 0.0 for deterministic output)
+- Check audio quality (16kHz recommended)
 
 ### VM Issues
 
@@ -882,10 +822,10 @@ A: Yes, install OpenClaw directly on your Mac. Skip Part 2 and run everything on
 A: Yes, OpenClaw supports Discord, Slack, Signal, WhatsApp, and more. See `openclaw channels status`.
 
 **Q: How private is this?**
-A: Voice transcription and LLM queries go to cloud APIs. For maximum privacy, use mlx-whisper + local LLM (Ollama). mlx-whisper runs 100% locally on your M1/M2/M3 Mac.
+A: Voice transcription and LLM queries go to cloud APIs. For maximum privacy, use mlx-audio + local LLM (Ollama). mlx-audio runs 100% locally on your M1/M2/M3 Mac.
 
 **Q: Can I run this on Linux?**
-A: Yes, the VM setup works the same. For host transcription on Linux (or Intel Mac), use whisper.cpp or OpenAI Whisper instead of mlx-whisper.
+A: Yes, the VM setup works the same. For host transcription on Linux (or Intel Mac), use whisper.cpp or OpenAI Whisper instead of mlx-audio.
 
 **Q: What if I want speaker names (not SPEAKER_00)?**
 A: pyannote doesn't do speaker identification (who is who), only diarization (how many speakers). For names, use a service like AssemblyAI or manually label.
@@ -899,8 +839,8 @@ A: Yes, that's the default. OpenClaw indexes everything under `~/.openclaw/works
 
 - **OpenClaw Docs**: https://docs.openclaw.ai/
 - **Telegram Bot API**: https://core.telegram.org/bots/api
-- **mlx-whisper**: https://github.com/ml-explore/mlx-examples/tree/main/whisper
-- **pyannote**: https://github.com/pyannote/pyannote-audio
+- **mlx-audio**: https://github.com/Blaizzy/mlx-audio
+- **VibeVoice-ASR**: https://huggingface.co/mlx-community/VibeVoice-ASR-bf16
 - **Lume VM**: https://github.com/lume-vm/lume
 - **Claude API**: https://console.anthropic.com/
 
