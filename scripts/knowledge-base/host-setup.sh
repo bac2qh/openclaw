@@ -37,26 +37,29 @@ fi
 # Create directories
 echo "Creating directories..."
 
+# Fast local storage (SSD)
+echo "  Creating local media folders..."
+mkdir -p ~/openclaw_media/recordings
+mkdir -p ~/openclaw_media/transcripts
+
 # Google Drive (synced to cloud)
 echo "  Creating Google Drive folders..."
 mkdir -p ~/Google\ Drive/My\ Drive/openclaw_agent/workspace
-mkdir -p ~/Google\ Drive/My\ Drive/openclaw_agent/transcripts
 
-# NAS (backed up)
-echo "  Creating NAS media folder..."
+# NAS (archival - audio only)
+echo "  Creating NAS archival folder..."
 if [ -d /Volumes/NAS_1/Xin ]; then
-    mkdir -p /Volumes/NAS_1/Xin/openclaw_agent/media
-    echo "  ✓ NAS folder created"
+    mkdir -p /Volumes/NAS_1/Xin/openclaw_agent/recordings
+    echo "  ✓ NAS folder created (audio files will be moved here after transcription)"
 else
-    echo "  ⚠ NAS not mounted at /Volumes/NAS_1. Skipping media folder."
-    echo "  Mount your NAS and run: mkdir -p /Volumes/NAS_1/Xin/openclaw_agent/media"
+    echo "  ⚠ NAS not mounted at /Volumes/NAS_1. Skipping NAS folder."
+    echo "  Mount your NAS and run:"
+    echo "    mkdir -p /Volumes/NAS_1/Xin/openclaw_agent/recordings"
 fi
 
-# Local only (not synced)
-echo "  Creating local folders..."
-mkdir -p ~/openclaw_agent/audio-inbox
-mkdir -p ~/openclaw_agent/audio-archive
-mkdir -p ~/openclaw_agent/scripts
+# Scripts directory
+echo "  Creating scripts folder..."
+mkdir -p ~/scripts
 
 # Copy scripts
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -66,11 +69,6 @@ if [ -f "$SCRIPT_DIR/transcribe.sh" ]; then
     echo "Installed transcribe.sh to ~/scripts/"
 fi
 
-if [ -f "$SCRIPT_DIR/diarize.py" ]; then
-    cp "$SCRIPT_DIR/diarize.py" ~/scripts/
-    chmod +x ~/scripts/diarize.py
-    echo "Installed diarize.py to ~/scripts/"
-fi
 
 # Install Lume (optional)
 echo ""
@@ -92,12 +90,15 @@ echo ""
 echo "=== Setup Complete ==="
 echo ""
 echo "Test transcription:"
-echo "  say 'Hello world' -o ~/audio-inbox/test.aiff"
+echo "  say 'Hello world' -o ~/openclaw_media/recordings/test.aiff"
 echo "  ~/scripts/transcribe.sh"
-echo "  cat ~/transcripts/*test*.txt"
+echo "  cat ~/openclaw_media/transcripts/*test*.json"
 echo ""
 echo "For auto-transcription, install the launchd plist:"
 echo "  cp scripts/knowledge-base/com.user.transcribe.plist ~/Library/LaunchAgents/"
-echo "  # Edit the file to set YOUR_USERNAME and HF_TOKEN"
+echo "  # Edit the file to set YOUR_USERNAME"
 echo "  launchctl load ~/Library/LaunchAgents/com.user.transcribe.plist"
+echo ""
+echo "Note: Audio files are automatically moved to NAS after transcription"
+echo "Transcripts stay local for fast LLM processing (manual cleanup when needed)"
 echo ""

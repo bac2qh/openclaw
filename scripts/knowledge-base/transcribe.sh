@@ -1,31 +1,31 @@
 #!/bin/bash
 # Transcribe audio files with mlx-audio (VibeVoice-ASR)
 #
-# This script monitors ~/audio-inbox/ for new audio files and transcribes them
+# This script monitors ~/openclaw_media/recordings/ for new audio files and transcribes them
 # using mlx-audio with Microsoft's VibeVoice-ASR model (includes speaker diarization).
+# After successful transcription, audio files are moved to NAS for archival.
 #
 # Usage:
-#   1. Drop audio files into ~/audio-inbox/
+#   1. Drop audio files into ~/openclaw_media/recordings/
 #   2. Run manually: ~/scripts/transcribe.sh
 #   3. Or auto-run via launchd (see setup guide)
 #
 # Requirements:
 #   - mlx-audio (pip install mlx-audio)
 #   - ffmpeg (brew install ffmpeg)
+#   - NAS mounted at /Volumes/NAS_1 (optional, files kept locally if not mounted)
 
 set -euo pipefail
 
 # Configuration
-INPUT_DIR="${HOME}/openclaw_agent/audio-inbox"
-OUTPUT_DIR="${HOME}/Google Drive/My Drive/openclaw_agent/transcripts"
-ARCHIVE_DIR="${HOME}/openclaw_agent/audio-archive"
+INPUT_DIR="${HOME}/openclaw_media/recordings"
+OUTPUT_DIR="${HOME}/openclaw_media/transcripts"
+NAS_RECORDINGS="/Volumes/NAS_1/Xin/openclaw_agent/recordings"
 VIBEVOICE_MODEL="mlx-community/VibeVoice-ASR-bf16"
 MAX_TOKENS=8192
 
-# Note: Adjust OUTPUT_DIR path based on your Google Drive location
-
 # Ensure directories exist
-mkdir -p "$INPUT_DIR" "$OUTPUT_DIR" "$ARCHIVE_DIR"
+mkdir -p "$INPUT_DIR" "$OUTPUT_DIR"
 
 # Check dependencies
 if ! python -c "import mlx_audio" 2>/dev/null; then
@@ -62,13 +62,18 @@ for audio_file in "$INPUT_DIR"/*.mp3 "$INPUT_DIR"/*.m4a "$INPUT_DIR"/*.wav "$INP
         --max-tokens "$MAX_TOKENS" \
         --temperature 0.0 2>/dev/null; then
         echo "  ✓ Transcription saved: ${output_base}.json"
+
+        # Move audio to NAS after successful transcription
+        if [ -d "$NAS_RECORDINGS" ]; then
+            mv "$audio_file" "$NAS_RECORDINGS/"
+            echo "  ✓ Moved to NAS: $filename"
+        else
+            echo "  ⚠ NAS not mounted, keeping file locally"
+        fi
     else
         echo "  Error: Transcription failed" >&2
         continue
     fi
-
-    # Cleanup
-    mv "$audio_file" "$ARCHIVE_DIR/"
 
     echo "  ✓ Done: $filename"
     echo ""

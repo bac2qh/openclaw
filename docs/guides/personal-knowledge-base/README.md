@@ -11,69 +11,77 @@ Build a voice-powered memory system using OpenClaw, mlx-audio (VibeVoice), Lume 
 - Reminders: "Remind me tomorrow at 9am about the standup"
 
 **Total setup time:** ~30 minutes
-**Monthly cost:** ~$16 (Claude API + transcription)
+**Monthly cost:** ~$6 (Claude API only - transcription is 100% local)
 
 ---
 
 ## Architecture Overview
 
 ```
-┌─────────────────────────────────────────────────────────────────────────┐
-│ M1 Pro Mac (Host)                                                       │
-│                                                                         │
-│  ┌─────────────────┐                                                    │
-│  │ mlx-audio       │     ┌──────────────────────────────────────────┐  │
-│  │ VibeVoice-ASR   │ ──→ │ Google Drive (synced to cloud)           │  │
-│  │ (transcription  │     │ ~/Google Drive/.../openclaw_agent/       │  │
-│  │  + diarization) │     │ ├── workspace/MEMORY.md                  │  │
-│  └─────────────────┘     │ └── transcripts/*.json                   │  │
-│                          └──────────────────┬───────────────────────┘  │
-│                                             │ VirtioFS                  │
-│  ┌──────────────────────────────────────────┼───────────────────────┐  │
-│  │ Lume VM                                  ↓                       │  │
-│  │                       /mnt/workspace, /mnt/transcripts           │  │
-│  │                                                                  │  │
-│  │  ┌────────────────────────────────────────────────────────────┐ │  │
-│  │  │ OpenClaw                                                   │ │  │
-│  │  │ ├── Memory System (SQLite + embeddings)                   │ │  │
-│  │  │ ├── Telegram Bot ──→ /mnt/media (backed up to NAS)        │ │  │
-│  │  │ └── Claude Sonnet 4 (LLM)                                 │ │  │
-│  │  └────────────────────────────────────────────────────────────┘ │  │
-│  └──────────────────────────────────────────────────────────────────┘  │
-│                                                                         │
-│  ┌──────────────────────────────────────────────────────────────────┐  │
-│  │ NAS (/Volumes/NAS_1/Xin/openclaw_agent/media/)                   │  │
-│  │ └── Telegram voice messages (backed up)                          │  │
-│  └──────────────────────────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────┐
+│ M1 Pro Mac (Host)                                                        │
+│                                                                          │
+│  ┌─────────────────────────────────────────────────────────────────┐    │
+│  │ Fast Local Storage (SSD) - ~/openclaw_media/                    │    │
+│  │ ├── recordings/     ← Audio lands here (temporary)              │    │
+│  │ └── transcripts/    ← JSON transcripts (stays local)            │    │
+│  └─────────────────────────────────────────────────────────────────┘    │
+│                 ↓ VirtioFS                    ↓ launchd                 │
+│  ┌──────────────────────────┐    ┌───────────────────────────────────┐ │
+│  │ Lume VM                  │    │ mlx-audio (VibeVoice-ASR)         │ │
+│  │ /mnt/recordings          │    │ Transcription + diarization       │ │
+│  │ /mnt/transcripts         │    │ Runs on Metal GPU (100% local)    │ │
+│  │ /mnt/workspace           │    │ → Moves audio to NAS after        │ │
+│  │                          │    └───────────────────────────────────┘ │
+│  │ ┌──────────────────────┐ │                                           │
+│  │ │ OpenClaw             │ │                                           │
+│  │ │ ├── Telegram Bot     │ │                                           │
+│  │ │ ├── Memory System    │ │                                           │
+│  │ │ └── Claude Sonnet 4  │ │                                           │
+│  │ └──────────────────────┘ │                                           │
+│  └──────────────────────────┘                                           │
+│                                                                          │
+│  ┌───────────────────────────────────────────────────────────────────┐  │
+│  │ Google Drive (cloud sync)                                         │  │
+│  │ ~/Google Drive/.../openclaw_agent/workspace/                      │  │
+│  │ └── MEMORY.md (synced to cloud)                                   │  │
+│  └───────────────────────────────────────────────────────────────────┘  │
+│                                                                          │
+│  ┌───────────────────────────────────────────────────────────────────┐  │
+│  │ NAS (permanent storage)                                           │  │
+│  │ /Volumes/NAS_1/Xin/openclaw_agent/                                │  │
+│  │ └── recordings/    (audio moved here immediately after transcribe)│  │
+│  └───────────────────────────────────────────────────────────────────┘  │
+└──────────────────────────────────────────────────────────────────────────┘
 ```
 
 ## File Organization
 
 **What goes where:**
 
-| Location | Contents | Backup |
-|----------|----------|--------|
-| Google Drive | Markdown files, transcripts | Cloud sync |
-| NAS | Telegram audio files | NAS backup |
-| VM only | Databases, config, sessions | Not synced (rebuildable) |
-| Host local | Audio inbox, scripts | Not synced |
+| Location | Contents | Lifecycle | Why |
+|----------|----------|-----------|-----|
+| ~/openclaw_media/ (SSD) | Recordings (temporary), transcripts (permanent) | Audio → NAS after transcription | Fast transcription, searchable transcripts |
+| Google Drive | Markdown workspace | Cloud sync | Knowledge persistence |
+| NAS | Archived audio only | Permanent storage | Long-term audio archival |
+| VM only | Databases, config, sessions | Not synced | Rebuildable |
 
 **Host Mac paths:**
 ```
+~/openclaw_media/           # Fast local SSD
+├── recordings/             # Telegram voice messages (temporary - moved to NAS)
+└── transcripts/            # mlx-audio JSON outputs (stays local for LLM)
+
 ~/Google Drive/My Drive/openclaw_agent/
-├── workspace/              # Markdown files (synced to cloud)
-│   ├── MEMORY.md
-│   └── notes/
-└── transcripts/            # Transcription output (synced to cloud)
+└── workspace/              # Markdown files (synced to cloud)
+    ├── MEMORY.md
+    └── notes/
 
 /Volumes/NAS_1/Xin/openclaw_agent/
-└── media/                  # Telegram voice messages (backed up to NAS)
+└── recordings/             # Archived audio (moved here after transcription)
 
-~/openclaw_agent/           # Local only (not synced)
-├── audio-inbox/            # Drop long recordings here
-├── audio-archive/          # Processed recordings
-└── scripts/                # transcribe.sh
+~/scripts/                  # Scripts
+└── transcribe.sh           # mlx-audio transcription + NAS archival
 ```
 
 **VM paths:**
@@ -84,9 +92,9 @@ Build a voice-powered memory system using OpenClaw, mlx-audio (VibeVoice), Lume 
 ├── agents/                 # SQLite databases
 └── workspace -> /mnt/workspace   # Symlink to shared folder
 
+/mnt/recordings/            # Mounted from ~/openclaw_media/recordings
+/mnt/transcripts/           # Mounted from ~/openclaw_media/transcripts
 /mnt/workspace/             # Mounted from Google Drive
-/mnt/transcripts/           # Mounted from Google Drive
-/mnt/media/                 # Mounted from NAS
 ```
 
 ---
@@ -157,7 +165,7 @@ for seg in result.segments:
     print(f"[{seg['start_time']:.1f}-{seg['end_time']:.1f}] Speaker {seg['speaker_id']}: {seg['text']}")
 ```
 
-### 1.3 Install Transcription Script
+### 1.3 Install Scripts
 
 Copy the transcription script:
 
@@ -170,41 +178,47 @@ chmod +x ~/scripts/transcribe.sh
 ### 1.4 Create Directories
 
 ```bash
+# Fast local storage (SSD)
+mkdir -p ~/openclaw_media/recordings
+mkdir -p ~/openclaw_media/transcripts
+
 # Google Drive (synced to cloud)
 mkdir -p ~/Google\ Drive/My\ Drive/openclaw_agent/workspace
-mkdir -p ~/Google\ Drive/My\ Drive/openclaw_agent/transcripts
 
-# NAS (backed up)
-mkdir -p /Volumes/NAS_1/Xin/openclaw_agent/media
+# NAS (archival - audio only)
+mkdir -p /Volumes/NAS_1/Xin/openclaw_agent/recordings
 
-# Local only (not synced)
-mkdir -p ~/openclaw_agent/audio-inbox
-mkdir -p ~/openclaw_agent/audio-archive
-mkdir -p ~/openclaw_agent/scripts
+# Scripts
+mkdir -p ~/scripts
 ```
 
 **Note:** Adjust paths based on your setup:
 - Google Drive path depends on your sync location
-- NAS path depends on your mount point
-- Use `ln -s` to create shortcuts if needed
+- NAS path depends on your mount point (audio files are moved here after transcription)
+- Transcripts stay in `~/openclaw_media/transcripts/` for fast LLM access (manual cleanup when needed)
 
 ### 1.5 Test the Transcription Pipeline
 
 ```bash
 # Create test recording
-say "Hello, this is a test of the transcription system." -o ~/audio-inbox/test.aiff
+say "Hello, this is a test of the transcription system." -o ~/openclaw_media/recordings/test.aiff
 
 # Run transcription
 ~/scripts/transcribe.sh
 
-# Check output
-ls ~/transcripts/
-cat ~/transcripts/*test*.json
+# Check transcript output
+ls ~/openclaw_media/transcripts/
+cat ~/openclaw_media/transcripts/*test*.json
+
+# Check audio was moved to NAS
+ls /Volumes/NAS_1/Xin/openclaw_agent/recordings/
 ```
 
-**Expected output:** JSON file with transcription, timestamps, and speaker labels.
+**Expected output:**
+- JSON file with transcription, timestamps, and speaker labels in `~/openclaw_media/transcripts/`
+- Audio file moved to NAS at `/Volumes/NAS_1/Xin/openclaw_agent/recordings/`
 
-### 1.6 Auto-Transcribe with launchd (Optional)
+### 1.6 Auto-Transcribe with launchd
 
 Create `~/Library/LaunchAgents/com.user.transcribe.plist`:
 
@@ -222,7 +236,7 @@ Create `~/Library/LaunchAgents/com.user.transcribe.plist`:
     </array>
     <key>WatchPaths</key>
     <array>
-        <string>/Users/YOUR_USERNAME/audio-inbox</string>
+        <string>/Users/YOUR_USERNAME/openclaw_media/recordings</string>
     </array>
     <key>EnvironmentVariables</key>
     <dict>
@@ -242,9 +256,11 @@ Replace `YOUR_USERNAME`, then load:
 ```bash
 launchctl load ~/Library/LaunchAgents/com.user.transcribe.plist
 
-# Test: drop a file in ~/audio-inbox and check logs
+# Test: drop a file in ~/openclaw_media/recordings and check logs
 tail -f /tmp/transcribe.log
 ```
+
+**Note:** Audio files are automatically moved to NAS after successful transcription. No separate archive script needed.
 
 ---
 
@@ -266,19 +282,19 @@ Edit `~/.lume/vms/memory-app/config.yaml`:
 
 ```yaml
 shared_directories:
-  # Workspace (markdown files) - in Google Drive
-  - host_path: /Users/YOUR_USERNAME/Google Drive/My Drive/openclaw_agent/workspace
-    guest_path: /mnt/workspace
+  # Recordings (audio files) - fast local SSD
+  - host_path: /Users/YOUR_USERNAME/music/recordings
+    guest_path: /mnt/recordings
     read_only: false
 
-  # Transcripts - in Google Drive
-  - host_path: /Users/YOUR_USERNAME/Google Drive/My Drive/openclaw_agent/transcripts
+  # Transcripts - fast local SSD
+  - host_path: /Users/YOUR_USERNAME/music/transcripts
     guest_path: /mnt/transcripts
     read_only: false
 
-  # Telegram media - on NAS
-  - host_path: /Volumes/NAS_1/Xin/openclaw_agent/media
-    guest_path: /mnt/media
+  # Workspace (markdown files) - in Google Drive
+  - host_path: /Users/YOUR_USERNAME/Google Drive/My Drive/openclaw_agent/workspace
+    guest_path: /mnt/workspace
     read_only: false
 ```
 
@@ -297,9 +313,9 @@ lume start memory-app
 lume ssh memory-app
 
 # Check mounts
-ls /mnt/workspace
+ls /mnt/recordings
 ls /mnt/transcripts
-ls /mnt/media
+ls /mnt/workspace
 ```
 
 All three folders should be accessible from the VM.
@@ -360,9 +376,21 @@ openclaw config set agents.defaults.memorySearch.provider "openai"
 openclaw config set providers.openai.apiKey "sk-..."
 ```
 
-### 3.4 Configure Memory Paths
+### 3.4 Configure Media Download Path
 
-Point OpenClaw workspace to the shared folders:
+Point OpenClaw to save Telegram voice messages to the local SSD:
+
+```bash
+# Set download path (temporary storage - moved to NAS after transcription)
+openclaw config set tools.media.downloadPath "/mnt/recordings"
+
+# Disable cloud transcription (use mlx-audio on host for 100% local processing)
+openclaw config set tools.media.audio.enabled false
+```
+
+### 3.5 Configure Workspace
+
+Point OpenClaw workspace to Google Drive:
 
 ```bash
 # Symlink workspace to Google Drive mount
@@ -370,11 +398,11 @@ ln -sf /mnt/workspace ~/.openclaw/workspace
 
 # Verify
 ls -la ~/.openclaw/workspace/
-ls /mnt/workspace/
+ls /mnt/recordings/
 ls /mnt/transcripts/
 ```
 
-### 3.5 Create Memory Files (on Host)
+### 3.6 Create Memory Files (on Host)
 
 Create initial memory file on your **host Mac** in Google Drive:
 
@@ -405,9 +433,9 @@ EOF
 mkdir -p ~/Google\ Drive/My\ Drive/openclaw_agent/workspace/notes
 ```
 
-This file will automatically appear in the VM at `/mnt/workspace/MEMORY.md` and sync to Google Drive.
+This file will automatically appear in the VM at `/mnt/workspace/MEMORY.md` and sync to Google Drive. Transcripts at `/mnt/transcripts/` are also searchable by the agent.
 
-### 3.6 Test Memory Search
+### 3.7 Test Memory Search
 
 ```bash
 # Index existing files
@@ -449,38 +477,20 @@ openclaw config set channels.telegram.allowlist '["YOUR_USER_ID"]'
 # Increase media size limit (for voice messages)
 openclaw config set channels.telegram.mediaMaxMb 20
 
-# Set media download path to NAS-backed folder
-openclaw config set tools.media.downloadPath "/mnt/media"
+# Set media download path to fast local SSD
+openclaw config set tools.media.downloadPath "/mnt/recordings"
+
+# Disable cloud transcription (use mlx-audio on host for 100% local processing)
+openclaw config set tools.media.audio.enabled false
 ```
 
 **What this does:**
-- Telegram voice messages → downloaded to `/mnt/media` (in VM)
-- `/mnt/media` → backed by NAS at `/Volumes/NAS_1/Xin/openclaw_agent/media/`
-- Your voice messages automatically backed up to NAS
-
-### 4.4 Configure Voice Transcription
-
-OpenClaw auto-transcribes voice messages. Choose a provider:
-
-**Option A: OpenAI Whisper (Recommended - simple)**
-```bash
-openclaw config set tools.media.audio.enabled true
-openclaw config set tools.media.audio.language "en"
-```
-
-**Option B: Deepgram (Better for long audio + diarization)**
-```bash
-# Get key: https://console.deepgram.com/
-openclaw config set providers.deepgram.apiKey "YOUR_KEY"
-openclaw config set tools.media.audio.models '[{"provider": "deepgram", "model": "nova-3"}]'
-```
-
-**Option C: Groq (Fast + free tier)**
-```bash
-# Get key: https://console.groq.com/
-openclaw config set providers.groq.apiKey "YOUR_KEY"
-openclaw config set tools.media.audio.models '[{"provider": "groq", "model": "whisper-large-v3-turbo"}]'
-```
+- Telegram voice messages → downloaded to `/mnt/recordings` (in VM)
+- `/mnt/recordings` → backed by local SSD at `~/openclaw_media/recordings/`
+- launchd watches for new files → triggers mlx-audio transcription on host
+- Transcripts appear at `~/openclaw_media/transcripts/` → visible to VM at `/mnt/transcripts/`
+- Audio files automatically moved to NAS after successful transcription
+- Transcripts stay local for fast LLM processing (manual cleanup when needed)
 
 ### 4.5 Start Gateway
 
@@ -540,18 +550,24 @@ Examples:
 
 ```bash
 # On host Mac:
-# 1. Record to ~/audio-inbox/meeting-2024-01-15.m4a
+# 1. Record to ~/openclaw_media/recordings/meeting-2024-01-15.m4a
 # 2. Transcription runs automatically (or manually):
 ~/scripts/transcribe.sh
 
-# Output appears in ~/transcripts/
-# VM sees it at /mnt/transcripts/
+# Transcript appears in ~/openclaw_media/transcripts/
+# Audio moved to NAS at /Volumes/NAS_1/Xin/openclaw_agent/recordings/
+# VM sees transcript at /mnt/transcripts/
 ```
 
 Then tell bot:
 ```
 "Index the meeting from January 15th and summarize"
 ```
+
+**Archival:**
+- Audio files: moved to NAS immediately after transcription
+- Transcripts: stay in `~/openclaw_media/transcripts/` for fast LLM access (manual cleanup when needed)
+- NAS path: `/Volumes/NAS_1/Xin/openclaw_agent/recordings/`
 
 ### 5.4 Query Your Memory
 
@@ -618,27 +634,33 @@ openclaw cron remove <job-id>
 | Data | Location | Backup Method | Why |
 |------|----------|---------------|-----|
 | **Markdown files** | Google Drive | Cloud sync | Your actual knowledge |
-| **Transcripts** | Google Drive | Cloud sync | Searchable text from audio |
-| **Voice messages** | NAS | NAS backup | Original audio files |
+| **Voice messages** | ~/openclaw_media/recordings | Immediate to NAS after transcription | Original audio files |
+| **Transcripts** | ~/openclaw_media/transcripts | Stays local | Searchable text for LLM (manual cleanup) |
 | **Databases** | VM only | Not backed up | Rebuildable from markdown |
 | **Config/credentials** | VM only | Manual backup | Sensitive, manual only |
 
 ### How Sync Works
 
 ```
-┌────────────────────────────────────────────────────────────────┐
-│ Your workflow:                                                 │
-│                                                                │
-│ 1. Send voice memo to Telegram                                │
-│    ↓                                                           │
-│ 2. OpenClaw downloads to /mnt/media → NAS backup              │
-│    ↓                                                           │
-│ 3. OpenClaw transcribes via API                               │
-│    ↓                                                           │
-│ 4. Agent writes notes to /mnt/workspace → Google Drive        │
-│    ↓                                                           │
-│ 5. Your markdown files sync to cloud automatically            │
-└────────────────────────────────────────────────────────────────┘
+┌───────────────────────────────────────────────────────────────────────┐
+│ Unified Audio Flow:                                                   │
+│                                                                       │
+│ 1. Send voice memo to Telegram                                       │
+│    ↓                                                                  │
+│ 2. OpenClaw downloads to /mnt/recordings → ~/openclaw_media/recordings│
+│    ↓                                                                  │
+│ 3. launchd triggers transcribe.sh on host                            │
+│    ↓                                                                  │
+│ 4. mlx-audio transcribes locally (Metal GPU, 100% local)             │
+│    ↓                                                                  │
+│ 5. Output JSON to ~/openclaw_media/transcripts                       │
+│    ↓                                                                  │
+│ 6. Move audio to NAS (/Volumes/NAS_1/.../recordings/)                │
+│    ↓                                                                  │
+│ 7. VM sees transcript at /mnt/transcripts, agent processes it        │
+│    ↓                                                                  │
+│ 8. Agent writes notes to /mnt/workspace → Google Drive               │
+└───────────────────────────────────────────────────────────────────────┘
 ```
 
 ### Manual Backups (Config Only)
@@ -658,13 +680,15 @@ lume ssh memory-app -- cat /tmp/openclaw-config-backup.tar.gz > ~/openclaw-confi
 
 If VM dies or databases corrupt:
 
-1. **Your data is safe** - markdown in Google Drive, audio on NAS
+1. **Your data is safe** - markdown in Google Drive, transcripts on host, audio on NAS
 2. **Recreate VM** following Part 2
 3. **Reinstall OpenClaw** following Part 3
 4. **Restore config** from backup (or reconfigure)
 5. **Reindex memory**: `openclaw memory index --force`
 
 Done. All your knowledge is back.
+
+**Note:** Transcripts stay in `~/openclaw_media/transcripts/` for LLM processing. Clean up manually when needed.
 
 ### Multi-Device Access
 
@@ -678,38 +702,37 @@ Since markdown lives in Google Drive:
 
 ## Part 8: Cost Summary
 
-### Recommended Setup: Telegram + Deepgram + Sonnet API
+### Unified Local Transcription Flow
 
 | Component | Monthly Cost |
 |-----------|--------------|
 | Claude Sonnet 4 (~1.2M tokens) | ~$6 |
 | OpenAI Embeddings (~100K tokens) | ~$0.10 |
-| Deepgram transcription (~2400 min) | ~$10 |
-| **Total** | **~$16/month** |
+| mlx-audio (local transcription) | **FREE** |
+| **Total** | **~$6/month** |
 
 ### Usage Estimates
 
 - Voice memos: 20/day × 1 min = 600 min/month
 - Meetings: 3/week × 1 hour = 720 min/month
-- Long recordings (host): 2/month × 2 hours = free (mlx-audio)
+- Long recordings: 2/month × 2 hours = 240 min/month
+- **All transcription: 100% local via mlx-audio (FREE)**
 - LLM queries: ~40/day × ~30K tokens = 1.2M tokens/month
 
-### Alternative Options
+### Why This Setup?
 
-**Option A: All cloud (OpenAI Whisper)**
-- Total: ~$20/month
-- Pros: Simpler, no local processing
-- Cons: $4/month more expensive
+**Benefits:**
+- ✅ **10x cheaper** than cloud transcription ($6 vs $60+/month)
+- ✅ **100% privacy** for voice/audio (never leaves your Mac)
+- ✅ **Built-in speaker diarization** (VibeVoice-ASR)
+- ✅ **Fast** (Metal GPU acceleration on M1/M2/M3)
+- ✅ **Simple** (single unified flow)
+- ✅ **Immediate NAS archival** (audio moved after transcription)
+- ✅ **Fast LLM access** (transcripts stay local)
 
-**Option B: Hybrid (Telegram + host mlx-audio)**
-- Total: ~$8/month
-- Pros: Cheapest, privacy, built-in diarization
-- Cons: Manual workflow for long meetings
-
-**Option C: Groq free tier**
-- Total: ~$6/month
-- Pros: Cheapest
-- Cons: Rate limits, no diarization
+**Requirements:**
+- Apple Silicon Mac (M1/M2/M3) for mlx-audio
+- NAS for archival (audio files moved immediately after transcription)
 
 ---
 
@@ -828,9 +851,11 @@ cat ~/.lume/vms/memory-app/config.yaml
 # Restart VM
 lume restart memory-app
 
-# Check mount inside VM
+# Check mounts inside VM
 lume ssh memory-app
+mount | grep recordings
 mount | grep transcripts
+mount | grep workspace
 ```
 
 ### Memory Not Indexing
@@ -844,7 +869,43 @@ openclaw memory status --deep
 
 # Verify paths
 ls ~/.openclaw/workspace/
+ls /mnt/recordings/
 ls /mnt/transcripts/
+```
+
+### Audio Files Not Transcribing
+
+**Check launchd is running:**
+```bash
+# Check if loaded
+launchctl list | grep transcribe
+
+# Check logs
+tail -f /tmp/transcribe.log
+tail -f /tmp/transcribe.err
+
+# Test manually
+~/scripts/transcribe.sh
+```
+
+**Check file permissions:**
+```bash
+ls -la ~/openclaw_media/recordings/
+ls -la ~/openclaw_media/transcripts/
+```
+
+### Audio Files Not Moving to NAS
+
+**Check NAS mount:**
+```bash
+# Verify NAS is mounted
+ls /Volumes/NAS_1/Xin/openclaw_agent/recordings
+
+# Check transcription logs
+tail -f /tmp/transcribe.log
+
+# Files should be moved immediately after transcription
+# If NAS not mounted, files remain in ~/openclaw_media/recordings/
 ```
 
 ### Telegram Bot Not Responding
@@ -865,29 +926,28 @@ openclaw channels status --probe
 
 ### Voice Transcription Failing
 
-**Check provider config:**
+**Check mlx-audio:**
 ```bash
-openclaw config get tools.media.audio
-openclaw config get providers.openai.apiKey
-# or
-openclaw config get providers.deepgram.apiKey
-```
+# Test mlx-audio installation
+python -c "import mlx_audio"
 
-**Test manually:**
-```bash
-# Record test
-echo "Test" | say -o /tmp/test.aiff
+# Check model download
+ls ~/.cache/huggingface/hub/ | grep VibeVoice
 
-# Upload to bot as voice message
-# Check logs for errors
+# Test transcription manually
+say "Test" -o /tmp/test.aiff
+python -m mlx_audio.stt.generate \
+    --model mlx-community/VibeVoice-ASR-bf16 \
+    --audio /tmp/test.aiff \
+    --format json
 ```
 
 **File too large:**
 ```bash
-# Increase limit
+# Increase Telegram limit
 openclaw config set channels.telegram.mediaMaxMb 50
 
-# Or use host transcription for large files
+# All files transcribed locally (no size limits on host)
 ```
 
 ---
@@ -956,8 +1016,8 @@ mkdir -p "$BACKUP_DIR"
 # Backup config and memory
 cp -r ~/.openclaw "$BACKUP_DIR/"
 
-# Backup transcripts
-cp -r ~/transcripts "$BACKUP_DIR/"
+# Backup transcripts (audio already on NAS)
+cp -r ~/openclaw_media/transcripts "$BACKUP_DIR/"
 
 # Compress
 tar -czf "$BACKUP_DIR.tar.gz" "$BACKUP_DIR"
