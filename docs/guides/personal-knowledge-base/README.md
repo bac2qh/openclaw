@@ -18,28 +18,75 @@ Build a voice-powered memory system using OpenClaw, mlx-audio (VibeVoice), Lume 
 ## Architecture Overview
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│ M1 Pro Mac (Host)                                               │
-│                                                                 │
-│  ┌─────────────────┐     ┌─────────────────────────────────┐   │
-│  │ mlx-audio       │     │ ~/transcripts/ (shared folder)  │   │
-│  │ VibeVoice-ASR   │ ──→ │ ├── meeting-2024-01-15.json     │   │
-│  │ (transcription  │     │ └── meeting-2024-01-16.json     │   │
-│  │  + diarization) │     └───────────────┬─────────────────┘   │
-│  └─────────────────┘                     │ VirtioFS            │
-│                                          │                     │
-│  ┌───────────────────────────────────────┼─────────────────┐   │
-│  │ Lume VM                               ↓                 │   │
-│  │                     /mnt/transcripts/ (mounted)         │   │
-│  │                                                         │   │
-│  │  ┌─────────────────────────────────────────────────┐   │   │
-│  │  │ OpenClaw                                        │   │   │
-│  │  │ ├── Memory System (SQLite + embeddings)        │   │   │
-│  │  │ ├── Telegram Bot (voice memos)                 │   │   │
-│  │  │ └── Claude Sonnet 4 (LLM)                      │   │   │
-│  │  └─────────────────────────────────────────────────┘   │   │
-│  └─────────────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────┐
+│ M1 Pro Mac (Host)                                                       │
+│                                                                         │
+│  ┌─────────────────┐                                                    │
+│  │ mlx-audio       │     ┌──────────────────────────────────────────┐  │
+│  │ VibeVoice-ASR   │ ──→ │ Google Drive (synced to cloud)           │  │
+│  │ (transcription  │     │ ~/Google Drive/.../openclaw_agent/       │  │
+│  │  + diarization) │     │ ├── workspace/MEMORY.md                  │  │
+│  └─────────────────┘     │ └── transcripts/*.json                   │  │
+│                          └──────────────────┬───────────────────────┘  │
+│                                             │ VirtioFS                  │
+│  ┌──────────────────────────────────────────┼───────────────────────┐  │
+│  │ Lume VM                                  ↓                       │  │
+│  │                       /mnt/workspace, /mnt/transcripts           │  │
+│  │                                                                  │  │
+│  │  ┌────────────────────────────────────────────────────────────┐ │  │
+│  │  │ OpenClaw                                                   │ │  │
+│  │  │ ├── Memory System (SQLite + embeddings)                   │ │  │
+│  │  │ ├── Telegram Bot ──→ /mnt/media (backed up to NAS)        │ │  │
+│  │  │ └── Claude Sonnet 4 (LLM)                                 │ │  │
+│  │  └────────────────────────────────────────────────────────────┘ │  │
+│  └──────────────────────────────────────────────────────────────────┘  │
+│                                                                         │
+│  ┌──────────────────────────────────────────────────────────────────┐  │
+│  │ NAS (/Volumes/NAS_1/Xin/openclaw_agent/media/)                   │  │
+│  │ └── Telegram voice messages (backed up)                          │  │
+│  └──────────────────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+## File Organization
+
+**What goes where:**
+
+| Location | Contents | Backup |
+|----------|----------|--------|
+| Google Drive | Markdown files, transcripts | Cloud sync |
+| NAS | Telegram audio files | NAS backup |
+| VM only | Databases, config, sessions | Not synced (rebuildable) |
+| Host local | Audio inbox, scripts | Not synced |
+
+**Host Mac paths:**
+```
+~/Google Drive/My Drive/openclaw_agent/
+├── workspace/              # Markdown files (synced to cloud)
+│   ├── MEMORY.md
+│   └── notes/
+└── transcripts/            # Transcription output (synced to cloud)
+
+/Volumes/NAS_1/Xin/openclaw_agent/
+└── media/                  # Telegram voice messages (backed up to NAS)
+
+~/openclaw_agent/           # Local only (not synced)
+├── audio-inbox/            # Drop long recordings here
+├── audio-archive/          # Processed recordings
+└── scripts/                # transcribe.sh
+```
+
+**VM paths:**
+```
+~/.openclaw/                # Stays in VM (databases, config)
+├── config.yaml
+├── sessions/
+├── agents/                 # SQLite databases
+└── workspace -> /mnt/workspace   # Symlink to shared folder
+
+/mnt/workspace/             # Mounted from Google Drive
+/mnt/transcripts/           # Mounted from Google Drive
+/mnt/media/                 # Mounted from NAS
 ```
 
 ---
@@ -123,10 +170,23 @@ chmod +x ~/scripts/transcribe.sh
 ### 1.4 Create Directories
 
 ```bash
-mkdir -p ~/audio-inbox      # Drop recordings here
-mkdir -p ~/transcripts      # Output (shared with VM)
-mkdir -p ~/audio-archive    # Processed files
+# Google Drive (synced to cloud)
+mkdir -p ~/Google\ Drive/My\ Drive/openclaw_agent/workspace
+mkdir -p ~/Google\ Drive/My\ Drive/openclaw_agent/transcripts
+
+# NAS (backed up)
+mkdir -p /Volumes/NAS_1/Xin/openclaw_agent/media
+
+# Local only (not synced)
+mkdir -p ~/openclaw_agent/audio-inbox
+mkdir -p ~/openclaw_agent/audio-archive
+mkdir -p ~/openclaw_agent/scripts
 ```
+
+**Note:** Adjust paths based on your setup:
+- Google Drive path depends on your sync location
+- NAS path depends on your mount point
+- Use `ln -s` to create shortcuts if needed
 
 ### 1.5 Test the Transcription Pipeline
 
@@ -200,14 +260,25 @@ lume create memory-app --os ubuntu --cpu 4 --memory 8192 --disk 50G
 # lume create memory-app --os macos --cpu 4 --memory 8192 --disk 50G
 ```
 
-### 2.2 Configure Shared Folder
+### 2.2 Configure Shared Folders
 
 Edit `~/.lume/vms/memory-app/config.yaml`:
 
 ```yaml
 shared_directories:
-  - host_path: /Users/YOUR_USERNAME/transcripts
+  # Workspace (markdown files) - in Google Drive
+  - host_path: /Users/YOUR_USERNAME/Google Drive/My Drive/openclaw_agent/workspace
+    guest_path: /mnt/workspace
+    read_only: false
+
+  # Transcripts - in Google Drive
+  - host_path: /Users/YOUR_USERNAME/Google Drive/My Drive/openclaw_agent/transcripts
     guest_path: /mnt/transcripts
+    read_only: false
+
+  # Telegram media - on NAS
+  - host_path: /Volumes/NAS_1/Xin/openclaw_agent/media
+    guest_path: /mnt/media
     read_only: false
 ```
 
@@ -219,17 +290,19 @@ Replace `YOUR_USERNAME` with your actual username.
 lume start memory-app
 ```
 
-### 2.4 Verify Shared Folder
+### 2.4 Verify Shared Folders
 
 ```bash
 # SSH into VM
 lume ssh memory-app
 
-# Check mount
+# Check mounts
+ls /mnt/workspace
 ls /mnt/transcripts
+ls /mnt/media
 ```
 
-You should see your transcribed files from the host.
+All three folders should be accessible from the VM.
 
 ---
 
@@ -289,23 +362,25 @@ openclaw config set providers.openai.apiKey "sk-..."
 
 ### 3.4 Configure Memory Paths
 
-Add transcripts folder to memory:
+Point OpenClaw workspace to the shared folders:
 
 ```bash
-# Create symlink
-mkdir -p ~/.openclaw/workspace
-ln -s /mnt/transcripts ~/.openclaw/workspace/transcripts
+# Symlink workspace to Google Drive mount
+ln -sf /mnt/workspace ~/.openclaw/workspace
 
 # Verify
 ls -la ~/.openclaw/workspace/
+ls /mnt/workspace/
+ls /mnt/transcripts/
 ```
 
-### 3.5 Create Memory Workspace
+### 3.5 Create Memory Files (on Host)
+
+Create initial memory file on your **host Mac** in Google Drive:
 
 ```bash
-mkdir -p ~/.openclaw/workspace/memory
-
-cat > ~/.openclaw/workspace/MEMORY.md << 'EOF'
+# On host Mac:
+cat > ~/Google\ Drive/My\ Drive/openclaw_agent/workspace/MEMORY.md << 'EOF'
 # Long-Term Memory
 
 ## About Me
@@ -325,7 +400,12 @@ cat > ~/.openclaw/workspace/MEMORY.md << 'EOF'
 ## Decisions Log
 <!-- Agent will append decisions here -->
 EOF
+
+# Create notes directory
+mkdir -p ~/Google\ Drive/My\ Drive/openclaw_agent/workspace/notes
 ```
+
+This file will automatically appear in the VM at `/mnt/workspace/MEMORY.md` and sync to Google Drive.
 
 ### 3.6 Test Memory Search
 
@@ -368,7 +448,15 @@ openclaw config set channels.telegram.allowlist '["YOUR_USER_ID"]'
 
 # Increase media size limit (for voice messages)
 openclaw config set channels.telegram.mediaMaxMb 20
+
+# Set media download path to NAS-backed folder
+openclaw config set tools.media.downloadPath "/mnt/media"
 ```
+
+**What this does:**
+- Telegram voice messages → downloaded to `/mnt/media` (in VM)
+- `/mnt/media` → backed by NAS at `/Volumes/NAS_1/Xin/openclaw_agent/media/`
+- Your voice messages automatically backed up to NAS
 
 ### 4.4 Configure Voice Transcription
 
@@ -523,7 +611,72 @@ openclaw cron remove <job-id>
 
 ---
 
-## Part 7: Cost Summary
+## Part 7: Backup and Sync Strategy
+
+### What Gets Backed Up
+
+| Data | Location | Backup Method | Why |
+|------|----------|---------------|-----|
+| **Markdown files** | Google Drive | Cloud sync | Your actual knowledge |
+| **Transcripts** | Google Drive | Cloud sync | Searchable text from audio |
+| **Voice messages** | NAS | NAS backup | Original audio files |
+| **Databases** | VM only | Not backed up | Rebuildable from markdown |
+| **Config/credentials** | VM only | Manual backup | Sensitive, manual only |
+
+### How Sync Works
+
+```
+┌────────────────────────────────────────────────────────────────┐
+│ Your workflow:                                                 │
+│                                                                │
+│ 1. Send voice memo to Telegram                                │
+│    ↓                                                           │
+│ 2. OpenClaw downloads to /mnt/media → NAS backup              │
+│    ↓                                                           │
+│ 3. OpenClaw transcribes via API                               │
+│    ↓                                                           │
+│ 4. Agent writes notes to /mnt/workspace → Google Drive        │
+│    ↓                                                           │
+│ 5. Your markdown files sync to cloud automatically            │
+└────────────────────────────────────────────────────────────────┘
+```
+
+### Manual Backups (Config Only)
+
+Databases rebuild automatically from markdown, but config/credentials should be backed up manually:
+
+```bash
+# Inside VM (do this occasionally)
+tar -czf /tmp/openclaw-config-backup.tar.gz ~/.openclaw/config.yaml ~/.openclaw/credentials/
+
+# Copy to host
+# (from host Mac)
+lume ssh memory-app -- cat /tmp/openclaw-config-backup.tar.gz > ~/openclaw-config-backup.tar.gz
+```
+
+### Disaster Recovery
+
+If VM dies or databases corrupt:
+
+1. **Your data is safe** - markdown in Google Drive, audio on NAS
+2. **Recreate VM** following Part 2
+3. **Reinstall OpenClaw** following Part 3
+4. **Restore config** from backup (or reconfigure)
+5. **Reindex memory**: `openclaw memory index --force`
+
+Done. All your knowledge is back.
+
+### Multi-Device Access
+
+Since markdown lives in Google Drive:
+
+- **Read on phone** - Google Drive app
+- **Edit on laptop** - any text editor + Google Drive sync
+- **Query via Telegram** - works from anywhere
+
+---
+
+## Part 8: Cost Summary
 
 ### Recommended Setup: Telegram + Deepgram + Sonnet API
 
