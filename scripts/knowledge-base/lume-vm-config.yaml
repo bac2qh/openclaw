@@ -16,15 +16,20 @@ os: ubuntu
 
 # Shared Directories (VirtioFS)
 shared_directories:
-  # Transcripts from host
-  - host_path: /Users/YOUR_USERNAME/transcripts
+  # Workspace (markdown files) - in Google Drive (synced to cloud)
+  - host_path: /Users/YOUR_USERNAME/Google Drive/My Drive/openclaw_agent/workspace
+    guest_path: /mnt/workspace
+    read_only: false
+
+  # Transcripts - in Google Drive (synced to cloud)
+  - host_path: /Users/YOUR_USERNAME/Google Drive/My Drive/openclaw_agent/transcripts
     guest_path: /mnt/transcripts
     read_only: false
 
-  # Optional: Share Documents folder
-  # - host_path: /Users/YOUR_USERNAME/Documents
-  #   guest_path: /mnt/documents
-  #   read_only: true
+  # Telegram media - on NAS (backed up)
+  - host_path: /Volumes/NAS_1/Xin/openclaw_agent/media
+    guest_path: /mnt/media
+    read_only: false
 
 # Network
 # Default: NAT networking (VM can access internet)

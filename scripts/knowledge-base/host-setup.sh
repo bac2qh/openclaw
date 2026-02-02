@@ -36,10 +36,27 @@ fi
 
 # Create directories
 echo "Creating directories..."
-mkdir -p ~/audio-inbox
-mkdir -p ~/transcripts
-mkdir -p ~/audio-archive
-mkdir -p ~/scripts
+
+# Google Drive (synced to cloud)
+echo "  Creating Google Drive folders..."
+mkdir -p ~/Google\ Drive/My\ Drive/openclaw_agent/workspace
+mkdir -p ~/Google\ Drive/My\ Drive/openclaw_agent/transcripts
+
+# NAS (backed up)
+echo "  Creating NAS media folder..."
+if [ -d /Volumes/NAS_1/Xin ]; then
+    mkdir -p /Volumes/NAS_1/Xin/openclaw_agent/media
+    echo "  ✓ NAS folder created"
+else
+    echo "  ⚠ NAS not mounted at /Volumes/NAS_1. Skipping media folder."
+    echo "  Mount your NAS and run: mkdir -p /Volumes/NAS_1/Xin/openclaw_agent/media"
+fi
+
+# Local only (not synced)
+echo "  Creating local folders..."
+mkdir -p ~/openclaw_agent/audio-inbox
+mkdir -p ~/openclaw_agent/audio-archive
+mkdir -p ~/openclaw_agent/scripts
 
 # Copy scripts
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

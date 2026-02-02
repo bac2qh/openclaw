@@ -16,11 +16,13 @@
 set -euo pipefail
 
 # Configuration
-INPUT_DIR="${HOME}/audio-inbox"
-OUTPUT_DIR="${HOME}/transcripts"
-ARCHIVE_DIR="${HOME}/audio-archive"
+INPUT_DIR="${HOME}/openclaw_agent/audio-inbox"
+OUTPUT_DIR="${HOME}/Google Drive/My Drive/openclaw_agent/transcripts"
+ARCHIVE_DIR="${HOME}/openclaw_agent/audio-archive"
 VIBEVOICE_MODEL="mlx-community/VibeVoice-ASR-bf16"
 MAX_TOKENS=8192
+
+# Note: Adjust OUTPUT_DIR path based on your Google Drive location
 
 # Ensure directories exist
 mkdir -p "$INPUT_DIR" "$OUTPUT_DIR" "$ARCHIVE_DIR"

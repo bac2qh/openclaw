@@ -46,6 +46,9 @@ channels:
 # Voice/Audio Transcription
 tools:
   media:
+    # Save downloaded media to NAS-backed folder
+    downloadPath: "/mnt/media"
+
     audio:
       enabled: true
       maxBytes: 26214400  # 25MB
