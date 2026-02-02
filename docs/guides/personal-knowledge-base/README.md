@@ -1,6 +1,6 @@
 # Personal Knowledge Base with OpenClaw
 
-Build a voice-powered memory system using OpenClaw, whisper.cpp, pyannote, Lume VM, and Claude Sonnet 4.
+Build a voice-powered memory system using OpenClaw, mlx-whisper, pyannote, Lume VM, and Claude Sonnet 4.
 
 ## Quick Start
 
@@ -22,8 +22,8 @@ Build a voice-powered memory system using OpenClaw, whisper.cpp, pyannote, Lume 
 │ M1 Pro Mac (Host)                                               │
 │                                                                 │
 │  ┌─────────────────┐     ┌─────────────────────────────────┐   │
-│  │ whisper.cpp     │     │ ~/transcripts/ (shared folder)  │   │
-│  │ (Metal GPU)     │ ──→ │ ├── meeting-2024-01-15.txt      │   │
+│  │ mlx-whisper     │     │ ~/transcripts/ (shared folder)  │   │
+│  │ (Apple MLX)     │ ──→ │ ├── meeting-2024-01-15.txt      │   │
 │  ├─────────────────┤     │ └── meeting-2024-01-16.txt      │   │
 │  │ pyannote        │     └───────────────┬─────────────────┘   │
 │  │ (diarization)   │                     │ VirtioFS            │
@@ -68,26 +68,33 @@ brew install lume
 lume --version
 ```
 
-### 1.2 Install whisper.cpp (Transcription)
+### 1.2 Install mlx-whisper (Transcription)
 
-whisper.cpp uses Metal GPU acceleration on M1 Pro for fast, local transcription.
+mlx-whisper uses Apple's MLX framework for native M1/M2/M3 GPU acceleration.
 
 ```bash
-# Install via Homebrew
-brew install whisper-cpp
+# Install ffmpeg (required for audio conversion)
+brew install ffmpeg
 
-# Download the large-v3 model (~3GB)
-whisper-cpp-download-model large-v3
+# Install mlx-whisper
+pip install mlx-whisper
 
 # Test it works
-echo "Test" | say -o /tmp/test.aiff
-whisper-cpp -m ~/.cache/whisper-cpp/ggml-large-v3.bin -f /tmp/test.aiff
+say "Hello, this is a test." -o /tmp/test.aiff
+mlx_whisper /tmp/test.aiff --model mlx-community/whisper-large-v3-mlx
 ```
 
 **Expected output:**
-```
-[00:00:00.000 --> 00:00:01.000]  Test
-```
+Creates `/tmp/test.txt` with transcription.
+
+**Available models (from mlx-community on Hugging Face):**
+
+| Model | Size | Use Case |
+|-------|------|----------|
+| `mlx-community/whisper-large-v3-mlx` | ~3GB | **Best accuracy** (recommended) |
+| `mlx-community/whisper-large-v3-turbo` | ~1.6GB | Fast + good accuracy |
+| `mlx-community/whisper-medium-mlx` | ~1.5GB | Balanced |
+| `mlx-community/whisper-small-mlx` | ~500MB | Quick tests |
 
 ### 1.3 Install pyannote (Speaker Diarization)
 
@@ -578,7 +585,7 @@ openclaw cron remove <job-id>
 
 - Voice memos: 20/day × 1 min = 600 min/month
 - Meetings: 3/week × 1 hour = 720 min/month
-- Long recordings (host): 2/month × 2 hours = free (whisper.cpp)
+- Long recordings (host): 2/month × 2 hours = free (mlx-whisper)
 - LLM queries: ~40/day × ~30K tokens = 1.2M tokens/month
 
 ### Alternative Options
@@ -588,7 +595,7 @@ openclaw cron remove <job-id>
 - Pros: Simpler, no local processing
 - Cons: $4/month more expensive
 
-**Option B: Hybrid (Telegram + host whisper.cpp)**
+**Option B: Hybrid (Telegram + host mlx-whisper)**
 - Total: ~$8/month
 - Pros: Cheapest, privacy
 - Cons: Manual workflow for long meetings
@@ -677,18 +684,28 @@ lume restart memory-app
 
 ## Troubleshooting
 
-### whisper.cpp Issues
+### mlx-whisper Issues
 
-**Model not found:**
+**Model not downloading:**
 ```bash
-whisper-cpp-download-model large-v3
-ls ~/.cache/whisper-cpp/
+# Models auto-download from Hugging Face on first use
+# If issues, try explicit download:
+pip install huggingface_hub
+huggingface-cli download mlx-community/whisper-large-v3-mlx
 ```
 
 **Slow transcription:**
-- Ensure Metal GPU is available
+- Ensure you're on Apple Silicon (M1/M2/M3)
 - Check Activity Monitor → GPU usage
-- Try smaller model: `whisper-cpp-download-model medium`
+- Try smaller model: `mlx-community/whisper-large-v3-turbo`
+
+**ImportError or pip issues:**
+```bash
+# Use a virtual environment
+python3 -m venv ~/mlx-env
+source ~/mlx-env/bin/activate
+pip install mlx-whisper
+```
 
 ### pyannote Issues
 
@@ -865,10 +882,10 @@ A: Yes, install OpenClaw directly on your Mac. Skip Part 2 and run everything on
 A: Yes, OpenClaw supports Discord, Slack, Signal, WhatsApp, and more. See `openclaw channels status`.
 
 **Q: How private is this?**
-A: Voice transcription and LLM queries go to cloud APIs. For maximum privacy, use whisper.cpp + local LLM (Ollama).
+A: Voice transcription and LLM queries go to cloud APIs. For maximum privacy, use mlx-whisper + local LLM (Ollama). mlx-whisper runs 100% locally on your M1/M2/M3 Mac.
 
 **Q: Can I run this on Linux?**
-A: Yes, the VM setup works the same. For host transcription, use the same whisper.cpp + pyannote setup.
+A: Yes, the VM setup works the same. For host transcription on Linux (or Intel Mac), use whisper.cpp or OpenAI Whisper instead of mlx-whisper.
 
 **Q: What if I want speaker names (not SPEAKER_00)?**
 A: pyannote doesn't do speaker identification (who is who), only diarization (how many speakers). For names, use a service like AssemblyAI or manually label.
@@ -882,7 +899,7 @@ A: Yes, that's the default. OpenClaw indexes everything under `~/.openclaw/works
 
 - **OpenClaw Docs**: https://docs.openclaw.ai/
 - **Telegram Bot API**: https://core.telegram.org/bots/api
-- **whisper.cpp**: https://github.com/ggerganov/whisper.cpp
+- **mlx-whisper**: https://github.com/ml-explore/mlx-examples/tree/main/whisper
 - **pyannote**: https://github.com/pyannote/pyannote-audio
 - **Lume VM**: https://github.com/lume-vm/lume
 - **Claude API**: https://console.anthropic.com/

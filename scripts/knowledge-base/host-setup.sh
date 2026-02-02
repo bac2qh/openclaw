@@ -16,17 +16,23 @@ if ! command -v brew &> /dev/null; then
     /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 fi
 
-# Install whisper.cpp
-echo "Installing whisper.cpp..."
-brew install whisper-cpp
-
 # Install ffmpeg
 echo "Installing ffmpeg..."
 brew install ffmpeg
 
-# Download whisper model
-echo "Downloading whisper large-v3 model (~3GB)..."
-whisper-cpp-download-model large-v3
+# Install mlx-whisper
+echo "Installing mlx-whisper..."
+pip install mlx-whisper
+
+# Test mlx-whisper
+echo "Testing mlx-whisper installation..."
+if command -v mlx_whisper &> /dev/null; then
+    echo "  ✓ mlx-whisper installed successfully"
+    echo "  Note: Model will auto-download on first use (~3GB)"
+else
+    echo "  ⚠ mlx-whisper not found in PATH. You may need to:"
+    echo "    export PATH=\"\$HOME/Library/Python/3.x/bin:\$PATH\""
+fi
 
 # Create directories
 echo "Creating directories..."
