@@ -16,19 +16,19 @@ os: ubuntu
 
 # Shared Directories (VirtioFS)
 shared_directories:
-  # Workspace (markdown files) - in Google Drive (synced to cloud)
-  - host_path: /Users/YOUR_USERNAME/Google Drive/My Drive/openclaw_agent/workspace
-    guest_path: /mnt/workspace
+  # Recordings (audio files) - fast local SSD (temporary, moved to NAS after transcription)
+  - host_path: /Users/YOUR_USERNAME/openclaw_media/recordings
+    guest_path: /mnt/recordings
     read_only: false
 
-  # Transcripts - in Google Drive (synced to cloud)
-  - host_path: /Users/YOUR_USERNAME/Google Drive/My Drive/openclaw_agent/transcripts
+  # Transcripts - fast local SSD (stays local for agent processing)
+  - host_path: /Users/YOUR_USERNAME/openclaw_media/transcripts
     guest_path: /mnt/transcripts
     read_only: false
 
-  # Telegram media - on NAS (backed up)
-  - host_path: /Volumes/NAS_1/Xin/openclaw_agent/media
-    guest_path: /mnt/media
+  # Workspace (markdown files) - in Google Drive (synced to cloud)
+  - host_path: /Users/YOUR_USERNAME/Google Drive/My Drive/openclaw_agent/workspace
+    guest_path: /mnt/workspace
     read_only: false
 
 # Network

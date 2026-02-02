@@ -46,11 +46,12 @@ channels:
 # Voice/Audio Transcription
 tools:
   media:
-    # Save downloaded media to NAS-backed folder
-    downloadPath: "/mnt/media"
+    # Save downloaded media to fast local SSD (temporary, moved to NAS after transcription)
+    downloadPath: "/mnt/recordings"
 
     audio:
-      enabled: true
+      # Disable cloud transcription (use mlx-audio on host for 100% local processing)
+      enabled: false
       maxBytes: 26214400  # 25MB
       timeoutSeconds: 120  # 2 min timeout
       language: "en"
