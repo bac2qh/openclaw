@@ -49,12 +49,12 @@ mkdir -p ~/Google\ Drive/My\ Drive/openclaw_agent/transcripts
 # NAS (archival - audio only)
 echo "  Creating NAS archival folder..."
 if [ -d /Volumes/NAS_1/Xin ]; then
-    mkdir -p /Volumes/NAS_1/Xin/openclaw_agent/recordings
+    mkdir -p /Volumes/NAS_1/Xin/openclaw/media/recordings
     echo "  ✓ NAS folder created (audio files will be moved here after transcription)"
 else
     echo "  ⚠ NAS not mounted at /Volumes/NAS_1. Skipping NAS folder."
     echo "  Mount your NAS and run:"
-    echo "    mkdir -p /Volumes/NAS_1/Xin/openclaw_agent/recordings"
+    echo "    mkdir -p /Volumes/NAS_1/Xin/openclaw/media/recordings"
 fi
 
 # Scripts directory
