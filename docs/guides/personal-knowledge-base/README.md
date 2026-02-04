@@ -49,7 +49,7 @@ Build a voice-powered memory system using OpenClaw, mlx-audio (VibeVoice), Lume 
 │                                                                          │
 │  ┌───────────────────────────────────────────────────────────────────┐  │
 │  │ NAS (permanent storage)                                           │  │
-│  │ /Volumes/NAS_1/Xin/openclaw_agent/                                │  │
+│  │ /Volumes/NAS_1/Xin/openclaw/media/                                │  │
 │  │ └── recordings/    (audio moved here immediately after transcribe)│  │
 │  └───────────────────────────────────────────────────────────────────┘  │
 └──────────────────────────────────────────────────────────────────────────┘
@@ -80,7 +80,7 @@ Build a voice-powered memory system using OpenClaw, mlx-audio (VibeVoice), Lume 
 │   └── notes/
 └── transcripts/            # mlx-audio JSON outputs (synced to cloud)
 
-/Volumes/NAS_1/Xin/openclaw_agent/
+/Volumes/NAS_1/Xin/openclaw/media/
 └── recordings/             # Archived audio (moved here after transcription)
 ```
 
@@ -186,7 +186,7 @@ mkdir -p ~/Google\ Drive/My\ Drive/openclaw_agent/workspace
 mkdir -p ~/Google\ Drive/My\ Drive/openclaw_agent/transcripts
 
 # NAS (archival - audio only)
-mkdir -p /Volumes/NAS_1/Xin/openclaw_agent/recordings
+mkdir -p /Volumes/NAS_1/Xin/openclaw/media/recordings
 
 # Scripts
 mkdir -p ~/openclaw/scripts
@@ -211,12 +211,12 @@ ls ~/Google\ Drive/My\ Drive/openclaw_agent/transcripts/
 cat ~/Google\ Drive/My\ Drive/openclaw_agent/transcripts/*test*.json
 
 # Check audio was moved to NAS
-ls /Volumes/NAS_1/Xin/openclaw_agent/recordings/
+ls /Volumes/NAS_1/Xin/openclaw/media/recordings/
 ```
 
 **Expected output:**
 - JSON file with transcription, timestamps, and speaker labels in Google Drive transcripts folder
-- Audio file moved to NAS at `/Volumes/NAS_1/Xin/openclaw_agent/recordings/`
+- Audio file moved to NAS at `/Volumes/NAS_1/Xin/openclaw/media/recordings/`
 
 ### 1.6 Auto-Transcribe with launchd
 
@@ -555,7 +555,7 @@ Examples:
 ~/openclaw/scripts/transcribe.sh
 
 # Transcript appears in Google Drive
-# Audio moved to NAS at /Volumes/NAS_1/Xin/openclaw_agent/recordings/
+# Audio moved to NAS at /Volumes/NAS_1/Xin/openclaw/media/recordings/
 # VM sees transcript at /mnt/transcripts/
 ```
 
@@ -567,7 +567,7 @@ Then tell bot:
 **Archival:**
 - Audio files: moved to NAS immediately after transcription
 - Transcripts: saved to Google Drive (synced to cloud, accessible from any device)
-- NAS path: `/Volumes/NAS_1/Xin/openclaw_agent/recordings/`
+- NAS path: `/Volumes/NAS_1/Xin/openclaw/media/recordings/`
 
 ### 5.4 Query Your Memory
 
@@ -897,7 +897,7 @@ ls -la ~/Google\ Drive/My\ Drive/openclaw_agent/transcripts/
 **Check NAS mount:**
 ```bash
 # Verify NAS is mounted
-ls /Volumes/NAS_1/Xin/openclaw_agent/recordings
+ls /Volumes/NAS_1/Xin/openclaw/media/recordings
 
 # Check transcription logs
 tail -f /tmp/transcribe.log
