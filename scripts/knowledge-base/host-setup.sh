@@ -39,7 +39,7 @@ echo "Creating directories..."
 
 # Fast local storage (SSD) - temporary audio only
 echo "  Creating local recordings folder..."
-mkdir -p ~/openclaw_media/recordings
+mkdir -p ~/openclaw/media/recordings
 
 # Google Drive (synced to cloud) - workspace + transcripts
 echo "  Creating Google Drive folders..."
@@ -59,14 +59,14 @@ fi
 
 # Scripts directory
 echo "  Creating scripts folder..."
-mkdir -p ~/scripts
+mkdir -p ~/openclaw/scripts
 
 # Copy scripts
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if [ -f "$SCRIPT_DIR/transcribe.sh" ]; then
-    cp "$SCRIPT_DIR/transcribe.sh" ~/scripts/
-    chmod +x ~/scripts/transcribe.sh
-    echo "Installed transcribe.sh to ~/scripts/"
+    cp "$SCRIPT_DIR/transcribe.sh" ~/openclaw/scripts/
+    chmod +x ~/openclaw/scripts/transcribe.sh
+    echo "Installed transcribe.sh to ~/openclaw/scripts/"
 fi
 
 
@@ -90,8 +90,8 @@ echo ""
 echo "=== Setup Complete ==="
 echo ""
 echo "Test transcription:"
-echo "  say 'Hello world' -o ~/openclaw_media/recordings/test.aiff"
-echo "  ~/scripts/transcribe.sh"
+echo "  say 'Hello world' -o ~/openclaw/media/recordings/test.aiff"
+echo "  ~/openclaw/scripts/transcribe.sh"
 echo "  cat ~/Google\\ Drive/My\\ Drive/openclaw_agent/transcripts/*test*.json"
 echo ""
 echo "For auto-transcription, install the launchd plist:"

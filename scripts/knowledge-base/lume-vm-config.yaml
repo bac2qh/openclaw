@@ -17,7 +17,7 @@ os: ubuntu
 # Shared Directories (VirtioFS)
 shared_directories:
   # Recordings (audio files) - fast local SSD (temporary, moved to NAS after transcription)
-  - host_path: /Users/YOUR_USERNAME/openclaw_media/recordings
+  - host_path: /Users/YOUR_USERNAME/openclaw/media/recordings
     guest_path: /mnt/recordings
     read_only: false
 
