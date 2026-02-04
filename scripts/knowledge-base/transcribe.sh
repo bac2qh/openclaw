@@ -3,6 +3,7 @@
 #
 # This script monitors ~/openclaw_media/recordings/ for new audio files and transcribes them
 # using mlx-audio with Microsoft's VibeVoice-ASR model (includes speaker diarization).
+# Transcripts are saved to Google Drive for cloud sync.
 # After successful transcription, audio files are moved to NAS for archival.
 #
 # Usage:
@@ -13,13 +14,14 @@
 # Requirements:
 #   - mlx-audio (pip install mlx-audio)
 #   - ffmpeg (brew install ffmpeg)
+#   - Google Drive mounted at ~/Google Drive/My Drive
 #   - NAS mounted at /Volumes/NAS_1 (optional, files kept locally if not mounted)
 
 set -euo pipefail
 
 # Configuration
 INPUT_DIR="${HOME}/openclaw_media/recordings"
-OUTPUT_DIR="${HOME}/openclaw_media/transcripts"
+OUTPUT_DIR="${HOME}/Google Drive/My Drive/openclaw_agent/transcripts"
 NAS_RECORDINGS="/Volumes/NAS_1/Xin/openclaw_agent/recordings"
 VIBEVOICE_MODEL="mlx-community/VibeVoice-ASR-bf16"
 MAX_TOKENS=8192
