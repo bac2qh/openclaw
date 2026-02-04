@@ -21,7 +21,7 @@ set -euo pipefail
 
 # Configuration
 INPUT_DIR="${HOME}/openclaw/media/recordings"
-OUTPUT_DIR="${HOME}/Google Drive/My Drive/openclaw_agent/transcripts"
+OUTPUT_DIR="${HOME}/Google Drive/My Drive/openclaw/transcripts"
 NAS_RECORDINGS="/Volumes/NAS_1/Xin/openclaw/media/recordings"
 VIBEVOICE_MODEL="mlx-community/VibeVoice-ASR-bf16"
 MAX_TOKENS=8192
