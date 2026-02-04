@@ -21,8 +21,8 @@ shared_directories:
     guest_path: /mnt/recordings
     read_only: false
 
-  # Transcripts - fast local SSD (stays local for agent processing)
-  - host_path: /Users/YOUR_USERNAME/openclaw_media/transcripts
+  # Transcripts - in Google Drive (synced to cloud)
+  - host_path: /Users/YOUR_USERNAME/Google Drive/My Drive/openclaw_agent/transcripts
     guest_path: /mnt/transcripts
     read_only: false
 

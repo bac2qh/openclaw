@@ -37,14 +37,14 @@ fi
 # Create directories
 echo "Creating directories..."
 
-# Fast local storage (SSD)
-echo "  Creating local media folders..."
+# Fast local storage (SSD) - temporary audio only
+echo "  Creating local recordings folder..."
 mkdir -p ~/openclaw_media/recordings
-mkdir -p ~/openclaw_media/transcripts
 
-# Google Drive (synced to cloud)
+# Google Drive (synced to cloud) - workspace + transcripts
 echo "  Creating Google Drive folders..."
 mkdir -p ~/Google\ Drive/My\ Drive/openclaw_agent/workspace
+mkdir -p ~/Google\ Drive/My\ Drive/openclaw_agent/transcripts
 
 # NAS (archival - audio only)
 echo "  Creating NAS archival folder..."
@@ -92,13 +92,12 @@ echo ""
 echo "Test transcription:"
 echo "  say 'Hello world' -o ~/openclaw_media/recordings/test.aiff"
 echo "  ~/scripts/transcribe.sh"
-echo "  cat ~/openclaw_media/transcripts/*test*.json"
+echo "  cat ~/Google\\ Drive/My\\ Drive/openclaw_agent/transcripts/*test*.json"
 echo ""
 echo "For auto-transcription, install the launchd plist:"
 echo "  cp scripts/knowledge-base/com.user.transcribe.plist ~/Library/LaunchAgents/"
 echo "  # Edit the file to set YOUR_USERNAME"
 echo "  launchctl load ~/Library/LaunchAgents/com.user.transcribe.plist"
 echo ""
-echo "Note: Audio files are automatically moved to NAS after transcription"
-echo "Transcripts stay local for fast LLM processing (manual cleanup when needed)"
+echo "Note: Audio files moved to NAS and transcripts saved to Google Drive after transcription"
 echo ""
