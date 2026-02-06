@@ -136,9 +136,10 @@ pip install mlx-audio
 
 # Test it works
 say "Hello, this is a test of the transcription system." -o /tmp/test.aiff
+ffmpeg -y -i /tmp/test.aiff /tmp/test.mp3 2>/dev/null
 python -m mlx_audio.stt.generate \
     --model mlx-community/VibeVoice-ASR-bf16 \
-    --audio /tmp/test.aiff \
+    --audio /tmp/test.mp3 \
     --format json \
     --max-tokens 8192
 ```
@@ -200,10 +201,10 @@ mkdir -p ~/openclaw/scripts
 ### 1.5 Test the Transcription Pipeline
 
 ```bash
-# Create test recording
+# Create test recording (script auto-converts to MP3 for transcription)
 say "Hello, this is a test of the transcription system." -o ~/openclaw/media/recordings/test.aiff
 
-# Run transcription
+# Run transcription (auto-converts aiff → mp3, then transcribes)
 ~/openclaw/scripts/transcribe.sh
 
 # Check transcript output (in Google Drive)
@@ -934,9 +935,10 @@ ls ~/.cache/huggingface/hub/ | grep VibeVoice
 
 # Test transcription manually
 say "Test" -o /tmp/test.aiff
+ffmpeg -y -i /tmp/test.aiff /tmp/test.mp3 2>/dev/null
 python -m mlx_audio.stt.generate \
     --model mlx-community/VibeVoice-ASR-bf16 \
-    --audio /tmp/test.aiff \
+    --audio /tmp/test.mp3 \
     --format json
 ```
 
