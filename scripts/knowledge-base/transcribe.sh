@@ -64,7 +64,7 @@ for audio_file in "$INPUT_DIR"/*.ogg "$INPUT_DIR"/*.m4a "$INPUT_DIR"/*.wav "$INP
     else
         mp3_file="$INPUT_DIR/${basename_no_ext}.mp3"
         echo "  Converting to MP3..."
-        if ffmpeg -y -i "$audio_file" -q:a 2 "$mp3_file" 2>/dev/null; then
+        if ffmpeg -y -i "$audio_file" -q:a 2 "$mp3_file" -loglevel warning; then
             echo "  ✓ Converted: ${basename_no_ext}.mp3"
             converted=true
         else
@@ -82,7 +82,7 @@ for audio_file in "$INPUT_DIR"/*.ogg "$INPUT_DIR"/*.m4a "$INPUT_DIR"/*.wav "$INP
         --output-name "${timestamp}-${basename_no_ext}" \
         --format json \
         --max-tokens "$MAX_TOKENS" \
-        --temperature 0.0 2>/dev/null; then
+        --temperature 0.0; then
         echo "  ✓ Transcription saved: ${output_base}.json"
 
         # Move audio files to NAS after successful transcription
