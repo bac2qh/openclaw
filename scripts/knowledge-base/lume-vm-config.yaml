@@ -22,12 +22,12 @@ shared_directories:
     read_only: false
 
   # Transcripts - in Google Drive (synced to cloud)
-  - host_path: /Users/YOUR_USERNAME/Google Drive/My Drive/openclaw/transcripts
+  - host_path: /Users/YOUR_USERNAME/Insync/bac2qh@gmail.com/Google Drive/openclaw/transcripts
     guest_path: /mnt/transcripts
     read_only: false
 
-  # Workspace (markdown files) - in Google Drive (synced to cloud)
-  - host_path: /Users/YOUR_USERNAME/Google Drive/My Drive/openclaw/workspace
+  # Workspace (markdown files) - in Insync (synced to cloud)
+  - host_path: /Users/YOUR_USERNAME/Insync/bac2qh@gmail.com/Google Drive/openclaw/workspace
     guest_path: /mnt/workspace
     read_only: false
 

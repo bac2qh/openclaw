@@ -17,7 +17,7 @@
 # Requirements:
 #   - mlx-audio (pip install mlx-audio)
 #   - ffmpeg (brew install ffmpeg)
-#   - Google Drive mounted at ~/Google Drive/My Drive
+#   - Insync (Google Drive) mounted at ~/Insync/bac2qh@gmail.com/Google Drive
 #   - NAS mounted at /Volumes/NAS_1 (optional, files kept locally if not mounted)
 
 set -euo pipefail

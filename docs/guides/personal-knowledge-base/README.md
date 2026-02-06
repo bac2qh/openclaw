@@ -74,7 +74,7 @@ Build a voice-powered memory system using OpenClaw, mlx-audio (VibeVoice), Lume 
 └── scripts/
     └── transcribe.sh       # mlx-audio transcription + NAS archival
 
-~/Google Drive/My Drive/openclaw/
+~/Insync/bac2qh@gmail.com/Google Drive/openclaw/
 ├── workspace/              # Markdown files (synced to cloud)
 │   ├── MEMORY.md
 │   └── notes/
@@ -183,8 +183,8 @@ chmod +x ~/openclaw/scripts/transcribe.sh
 mkdir -p ~/openclaw/media/recordings
 
 # Google Drive (synced to cloud) - workspace + transcripts
-mkdir -p ~/Google\ Drive/My\ Drive/openclaw/workspace
-mkdir -p ~/Google\ Drive/My\ Drive/openclaw/transcripts
+mkdir -p ~/Insync/bac2qh@gmail.com/Google\ Drive/openclaw/workspace
+mkdir -p ~/Insync/bac2qh@gmail.com/Google\ Drive/openclaw/transcripts
 
 # NAS (archival - audio only)
 mkdir -p /Volumes/NAS_1/Xin/openclaw/media/recordings
@@ -208,8 +208,8 @@ say "Hello, this is a test of the transcription system." -o ~/openclaw/media/rec
 ~/openclaw/scripts/transcribe.sh
 
 # Check transcript output (in Google Drive)
-ls ~/Google\ Drive/My\ Drive/openclaw/transcripts/
-cat ~/Google\ Drive/My\ Drive/openclaw/transcripts/*test*.json
+ls ~/Insync/bac2qh@gmail.com/Google\ Drive/openclaw/transcripts/
+cat ~/Insync/bac2qh@gmail.com/Google\ Drive/openclaw/transcripts/*test*.json
 
 # Check audio was moved to NAS
 ls /Volumes/NAS_1/Xin/openclaw/media/recordings/
@@ -289,12 +289,12 @@ shared_directories:
     read_only: false
 
   # Transcripts - in Google Drive
-  - host_path: /Users/YOUR_USERNAME/Google Drive/My Drive/openclaw/transcripts
+  - host_path: /Users/YOUR_USERNAME/Insync/bac2qh@gmail.com/Google Drive/openclaw/transcripts
     guest_path: /mnt/transcripts
     read_only: false
 
   # Workspace (markdown files) - in Google Drive
-  - host_path: /Users/YOUR_USERNAME/Google Drive/My Drive/openclaw/workspace
+  - host_path: /Users/YOUR_USERNAME/Insync/bac2qh@gmail.com/Google Drive/openclaw/workspace
     guest_path: /mnt/workspace
     read_only: false
 ```
@@ -409,7 +409,7 @@ Create initial memory file on your **host Mac** in Google Drive:
 
 ```bash
 # On host Mac:
-cat > ~/Google\ Drive/My\ Drive/openclaw/workspace/MEMORY.md << 'EOF'
+cat > ~/Insync/bac2qh@gmail.com/Google\ Drive/openclaw/workspace/MEMORY.md << 'EOF'
 # Long-Term Memory
 
 ## About Me
@@ -431,7 +431,7 @@ cat > ~/Google\ Drive/My\ Drive/openclaw/workspace/MEMORY.md << 'EOF'
 EOF
 
 # Create notes directory
-mkdir -p ~/Google\ Drive/My\ Drive/openclaw/workspace/notes
+mkdir -p ~/Insync/bac2qh@gmail.com/Google\ Drive/openclaw/workspace/notes
 ```
 
 This file will automatically appear in the VM at `/mnt/workspace/MEMORY.md` and sync to Google Drive. Transcripts at `/mnt/transcripts/` are also searchable by the agent.
@@ -890,7 +890,7 @@ tail -f /tmp/transcribe.err
 **Check file permissions:**
 ```bash
 ls -la ~/openclaw/media/recordings/
-ls -la ~/Google\ Drive/My\ Drive/openclaw/transcripts/
+ls -la ~/Insync/bac2qh@gmail.com/Google\ Drive/openclaw/transcripts/
 ```
 
 ### Audio Files Not Moving to NAS
