@@ -78,8 +78,7 @@ for audio_file in "$INPUT_DIR"/*.ogg "$INPUT_DIR"/*.m4a "$INPUT_DIR"/*.wav "$INP
     if python -m mlx_audio.stt.generate \
         --model "$VIBEVOICE_MODEL" \
         --audio "$mp3_file" \
-        --output-path "$OUTPUT_DIR" \
-        --output-name "${timestamp}-${basename_no_ext}" \
+        --output-path "${output_base}" \
         --format json \
         --max-tokens "$MAX_TOKENS" \
         --temperature 0.0; then
