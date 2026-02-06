@@ -80,8 +80,7 @@ for audio_file in "$INPUT_DIR"/*.ogg "$INPUT_DIR"/*.m4a "$INPUT_DIR"/*.wav "$INP
         --audio "$mp3_file" \
         --output-path "${output_base}" \
         --format json \
-        --max-tokens "$MAX_TOKENS" \
-        --temperature 0.0; then
+        --max-tokens "$MAX_TOKENS"; then
         echo "  ✓ Transcription saved: ${output_base}.json"
 
         # Move audio files to NAS after successful transcription
