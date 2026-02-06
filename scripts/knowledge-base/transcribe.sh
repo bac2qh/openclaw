@@ -23,6 +23,7 @@
 set -euo pipefail
 
 # Configuration
+PYTHON="${HOME}/openclaw/scripts/.venv/bin/python"
 INPUT_DIR="${HOME}/openclaw/media/recordings"
 OUTPUT_DIR="${HOME}/Insync/bac2qh@gmail.com/Google Drive/openclaw/transcripts"
 NAS_RECORDINGS="/Volumes/NAS_1/Xin/openclaw/media/recordings"
@@ -33,7 +34,7 @@ MAX_TOKENS=8192
 mkdir -p "$INPUT_DIR" "$OUTPUT_DIR"
 
 # Check dependencies
-if ! python -c "import mlx_audio" 2>/dev/null; then
+if ! "$PYTHON" -c "import mlx_audio" 2>/dev/null; then
     echo "Error: mlx-audio not found. Install with: pip install mlx-audio" >&2
     exit 1
 fi
@@ -75,7 +76,7 @@ for audio_file in "$INPUT_DIR"/*.ogg "$INPUT_DIR"/*.m4a "$INPUT_DIR"/*.wav "$INP
 
     # Transcribe with VibeVoice-ASR (includes speaker diarization)
     echo "  Transcribing with VibeVoice-ASR (transcription + diarization)..."
-    if python -m mlx_audio.stt.generate \
+    if "$PYTHON" -m mlx_audio.stt.generate \
         --model "$VIBEVOICE_MODEL" \
         --audio "$mp3_file" \
         --output-path "${output_base}" \
