@@ -43,8 +43,8 @@ mkdir -p ~/openclaw/media/recordings
 
 # Google Drive (synced to cloud) - workspace + transcripts
 echo "  Creating Google Drive folders..."
-mkdir -p ~/Google\ Drive/My\ Drive/openclaw/workspace
-mkdir -p ~/Google\ Drive/My\ Drive/openclaw/transcripts
+mkdir -p ~/Insync/bac2qh@gmail.com/Google\ Drive/openclaw/workspace
+mkdir -p ~/Insync/bac2qh@gmail.com/Google\ Drive/openclaw/transcripts
 
 # NAS (archival - audio only)
 echo "  Creating NAS archival folder..."
