@@ -603,7 +603,9 @@ For short voice messages (< 5 minutes), the standard sync flow works fine.
 │                                                             │  │
 │  [Watcher 2] ← /Volumes/My Shared Files/transcripts/ ←──────┼──┼──┐
 │       ↓                                                     │  │  │
-│  openclaw message send → Telegram                           │  │  │
+│  openclaw agent --message (AI processes transcript)         │  │  │
+│       ↓                                                     │  │  │
+│  Summarizes, extracts actions, updates memory               │  │  │
 └─────────────────────────────────────────────────────────────┘  │  │
                                                                  │  │
 ┌────────────────────────────────────────────────────────────────┼──┼─┐
@@ -624,7 +626,7 @@ For short voice messages (< 5 minutes), the standard sync flow works fine.
 1. **Telegram → VM:** Audio downloaded directly to shared folder `/Volumes/My Shared Files/media/recordings/`
 2. **mlx_audio (Host):** launchd watches `~/openclaw/media/recordings/`, transcribes with VibeVoice-ASR, saves to `~/openclaw/transcripts/`
 3. **Sync (Host):** After transcription, rsync syncs workspace + transcripts to Google Drive, moves audio to NAS
-4. **Watcher 2 (VM):** Picks up transcripts from `/Volumes/My Shared Files/transcripts/`, sends via `openclaw message send` to Telegram
+4. **Watcher 2 (VM):** Picks up transcripts from `/Volumes/My Shared Files/transcripts/`, triggers AI processing via `openclaw agent --message` (summarizes, extracts action items, updates memory)
 
 ### 5.3 Setup: Disable Built-in Transcription
 
@@ -680,14 +682,16 @@ chmod +x ~/audio-watcher.sh
 ~/audio-watcher.sh
 ```
 
-**Terminal 1: Start Watcher 2 (Transcript Sender) - Inside VM**
+**Terminal 1: Start Watcher 2 (Transcript Processor) - Inside VM**
+
+**Important:** This watcher uses `openclaw agent --message` to trigger **AI processing** of transcripts (summarizes meetings, extracts action items, updates memory) rather than just delivering raw text. Requires `agents.defaults.memorySearch.experimental.sessionMemory: true` for automatic indexing.
 
 ```bash
 # SSH into VM
 lume ssh nix
 
-# Set your Telegram chat ID
-export TELEGRAM_CHAT_ID="YOUR_CHAT_ID_HERE"
+# Enable session memory for automatic indexing (required)
+openclaw config set agents.defaults.memorySearch.experimental.sessionMemory true
 
 # Copy the watcher script (if not already done)
 # (Run this on host first: scp scripts/knowledge-base/transcript-watcher.sh nix:~/)
@@ -738,12 +742,12 @@ export TELEGRAM_CHAT_ID="YOUR_CHAT_ID_HERE"
 - Check transcription logs: `tail -f /tmp/transcribe.log`
 - Check recordings folder: `ls ~/openclaw/media/recordings/`
 
-**Transcripts not being sent:**
+**Transcripts not being processed:**
 - Check Watcher 2 is running: `ps aux | grep transcript-watcher` (in VM)
-- Check Telegram chat ID is set: `echo $TELEGRAM_CHAT_ID` (in VM)
+- Check session memory enabled: `openclaw config get agents.defaults.memorySearch.experimental.sessionMemory` (in VM)
 - Check VM can see transcripts: `ls /Volumes/My\ Shared\ Files/transcripts/` (in VM)
 - Check host transcripts: `ls ~/openclaw/transcripts/` (on host)
-- Test manual send: `openclaw message send --channel telegram --target "$TELEGRAM_CHAT_ID" --message "test"` (in VM)
+- Test manual processing: `openclaw agent --message "Summarize: Test transcript" --thinking medium` (in VM)
 
 ### 5.9 Verification Checklist
 
@@ -752,13 +756,14 @@ After implementing the async pipeline, verify everything is working:
 - [ ] VM starts with shared folder: `lume run nix --shared-dir ~/openclaw`
 - [ ] Shared folders visible in VM: `ls "/Volumes/My Shared Files/"`
 - [ ] Host transcription working: check `/tmp/transcribe.log`
-- [ ] Watcher 2 running in VM (transcript sender)
+- [ ] Session memory enabled: `openclaw config set agents.defaults.memorySearch.experimental.sessionMemory true`
+- [ ] Watcher 2 running in VM (transcript processor)
 - [ ] Send voice message to Telegram bot
 - [ ] Verify audio lands in `~/openclaw/media/recordings/` (host)
 - [ ] Verify mlx_audio transcribes to `~/openclaw/transcripts/` (host)
 - [ ] Verify transcripts synced to Google Drive
 - [ ] Verify audio moved to NAS
-- [ ] Verify transcript sent back to Telegram
+- [ ] Verify transcript processed by AI (check agent output logs)
 
 **Expected timeline for long recordings:**
 - Voice message sent → appears in shared folder immediately (< 1 second)
