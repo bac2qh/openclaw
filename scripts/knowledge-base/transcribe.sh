@@ -31,7 +31,7 @@ GDRIVE_TRANSCRIPTS="${HOME}/Insync/bac2qh@gmail.com/Google Drive/openclaw/transc
 GDRIVE_WORKSPACE="${HOME}/Insync/bac2qh@gmail.com/Google Drive/openclaw/workspace"
 NAS_RECORDINGS="/Volumes/NAS_1/Xin/openclaw/media/recordings"
 VIBEVOICE_MODEL="mlx-community/VibeVoice-ASR-bf16"
-MAX_TOKENS=8192
+MAX_TOKENS=65536
 
 # Chunking configuration (for long recordings)
 CHUNK_THRESHOLD=3300 # Split if audio > 55 minutes (in seconds)
