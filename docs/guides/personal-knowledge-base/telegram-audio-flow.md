@@ -133,21 +133,22 @@ Telegram Voice Message
          │
          ▼
 ┌─────────────────────────────────┐
-│  4. WATCHER 2 SENDS TO TELEGRAM │
-│  → Picks up .json transcript    │
-│  → openclaw message send        │
-│  → Telegram (NEW MESSAGE)       │
+│  4. AI PROCESSES TRANSCRIPT     │
+│  → openclaw agent --message     │
+│  → Summarizes meeting           │
+│  → Extracts action items        │
+│  → Updates memory/knowledge     │
 └─────────────────────────────────┘
 ```
 
 ### Key Limitations
 
-⚠️ **CRITICAL GAP IDENTIFIED**: The README's approach has a fundamental disconnect:
+⚠️ **CRITICAL GAPS IDENTIFIED**: The README's approach has key limitations:
 
 1. **Config doesn't exist**: `tools.media.downloadPath` is NOT implemented in the codebase
 2. **Files land in VM only**: Audio always downloads to `~/.openclaw/media/inbound/` (inside VM)
 3. **Manual copy required**: Files don't automatically land in the shared folder
-4. **Disconnected flow**: Transcripts arrive as new messages, not conversation context
+4. **AI processing vs notification**: Use `openclaw agent` for processing, not `openclaw message send` for delivery
 
 ### Configuration (as documented in README)
 
@@ -166,8 +167,8 @@ openclaw config set tools.media.audio.enabled false
 3. **AI Response**: Claude sees `<media:audio>` placeholder (no transcript)
 4. **Manual Step**: User must copy file from VM to host shared folder
 5. **Host Transcription**: launchd watches shared folder → mlx-audio → transcript JSON
-6. **Watcher 2**: Sends transcript as NEW message to Telegram
-7. **Result**: Transcript arrives separately, not integrated with conversation
+6. **Watcher 2**: Triggers AI processing via `openclaw agent --message`
+7. **Result**: AI processes transcript, extracts insights, updates memory
 
 ### When to Use
 
@@ -190,12 +191,12 @@ openclaw config set tools.media.audio.enabled false
 |---------|--------------|----------------|
 | **Transcription** | Cloud API | Local mlx-audio |
 | **Response time** | Immediate (< 10s) | Delayed (minutes to hours) |
-| **Context integration** | ✅ Yes - part of conversation | ❌ No - arrives as new message |
+| **Context integration** | ✅ Yes - part of conversation | ⚠️ Processed async via agent |
 | **Cost** | ~$0.006/min | FREE |
 | **Privacy** | Cloud | 100% local |
 | **Configuration** | Works out of box | ⚠️ Requires workaround |
 | **Best for** | Short voice memos | Long recordings (> 1 hour) |
-| **AI sees transcript** | ✅ Yes - in `ctx.Transcript` | ❌ No - arrives separately |
+| **AI sees transcript** | ✅ Yes - in `ctx.Transcript` | ✅ Yes - via agent processing |
 
 ---
 
@@ -233,6 +234,15 @@ openclaw config set tools.media.audio.enabled false
      originalName,
    );
    ```
+
+### Important: Agent Processing vs Message Delivery
+
+| Command | Behavior | Use Case |
+|---------|----------|----------|
+| `openclaw message send` | Just delivers text - AI doesn't process it | Simple notifications |
+| `openclaw agent --message` | **Triggers full AI processing** - reads, thinks, updates memory | Transcript analysis |
+
+**Recommendation:** Always use `openclaw agent --message` for transcripts so the AI actually processes them (summarizes, extracts action items, updates memory) instead of just delivering raw text.
 
 ### Workaround Options
 

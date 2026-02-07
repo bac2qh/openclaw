@@ -35,16 +35,26 @@ fswatch -0 "$TRANSCRIPTS_DIR" | while read -d "" file; do
   TEXT=$(jq -r '.[].Content' "$file" 2>/dev/null | tr '\n' ' ')
 
   if [[ -n "$TEXT" ]]; then
-    # Send to Telegram
-    # Use double quotes to preserve the text content
-    openclaw message send --channel telegram --target "$TELEGRAM_CHAT_ID" --message "$TEXT"
+    # Trigger AI to process transcript
+    # With experimental.sessionMemory enabled, this conversation is auto-indexed
+    openclaw agent \
+      --message "Process this meeting transcript and:
+1. Summarize key discussion points (3-5 bullets)
+2. Extract action items with owners and due dates
+3. Identify key decisions made
+4. Update your memory with important facts
+
+Transcript:
+$TEXT" \
+      --thinking medium \
+      --timeout 300
 
     if [[ $? -eq 0 ]]; then
-      # Move to processed directory only if send succeeded
+      # Move to processed directory only if processing succeeded
       mv "$file" "$PROCESSED_DIR/"
-      echo "  → Sent and archived: $(basename "$file")"
+      echo "  → Processed and archived: $(basename "$file")"
     else
-      echo "  → Error: Failed to send transcript"
+      echo "  → Error: Failed to process transcript"
     fi
   else
     echo "  → Warning: Could not parse transcript"
