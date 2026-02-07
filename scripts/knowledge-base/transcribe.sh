@@ -3,7 +3,7 @@
 #
 # This script monitors ~/openclaw/media/recordings/ for new audio files and transcribes them
 # using mlx-audio with Microsoft's VibeVoice-ASR model (includes speaker diarization).
-# Transcripts are saved to Google Drive for cloud sync.
+# Transcripts are saved to ~/openclaw/transcripts/ (shared with VM), then synced to Google Drive.
 # After successful transcription, audio files are moved to NAS for archival.
 #
 # Supported input formats: any format ffmpeg can decode (ogg, m4a, wav, mp3, flac, etc.)
@@ -17,7 +17,8 @@
 # Requirements:
 #   - mlx-audio (pip install mlx-audio)
 #   - ffmpeg (brew install ffmpeg)
-#   - Insync (Google Drive) mounted at ~/Insync/bac2qh@gmail.com/Google Drive
+#   - rsync (built-in on macOS)
+#   - Insync (Google Drive) mounted at ~/Insync/bac2qh@gmail.com/Google Drive (optional, for cloud sync)
 #   - NAS mounted at /Volumes/NAS_1 (optional, files kept locally if not mounted)
 
 set -euo pipefail
@@ -25,7 +26,9 @@ set -euo pipefail
 # Configuration
 PYTHON="${HOME}/openclaw/scripts/.venv/bin/python"
 INPUT_DIR="${HOME}/openclaw/media/recordings"
-OUTPUT_DIR="${HOME}/Insync/bac2qh@gmail.com/Google Drive/openclaw/transcripts"
+OUTPUT_DIR="${HOME}/openclaw/transcripts"
+GDRIVE_TRANSCRIPTS="${HOME}/Insync/bac2qh@gmail.com/Google Drive/openclaw/transcripts"
+GDRIVE_WORKSPACE="${HOME}/Insync/bac2qh@gmail.com/Google Drive/openclaw/workspace"
 NAS_RECORDINGS="/Volumes/NAS_1/Xin/openclaw/media/recordings"
 VIBEVOICE_MODEL="mlx-community/VibeVoice-ASR-bf16"
 MAX_TOKENS=8192
@@ -106,3 +109,27 @@ for audio_file in "$INPUT_DIR"/*.ogg "$INPUT_DIR"/*.m4a "$INPUT_DIR"/*.wav "$INP
 done
 
 echo "Transcription batch complete."
+
+# Sync transcripts and workspace to Google Drive
+if [ -d "$GDRIVE_TRANSCRIPTS" ] && [ -d "$GDRIVE_WORKSPACE" ]; then
+    echo ""
+    echo "Syncing to Google Drive..."
+
+    # Sync transcripts
+    if rsync -av --delete "$OUTPUT_DIR/" "$GDRIVE_TRANSCRIPTS/"; then
+        echo "  ✓ Transcripts synced to Google Drive"
+    else
+        echo "  ⚠ Warning: Failed to sync transcripts to Google Drive" >&2
+    fi
+
+    # Sync workspace (if it exists)
+    if [ -d "${HOME}/openclaw/workspace" ]; then
+        if rsync -av --delete "${HOME}/openclaw/workspace/" "$GDRIVE_WORKSPACE/"; then
+            echo "  ✓ Workspace synced to Google Drive"
+        else
+            echo "  ⚠ Warning: Failed to sync workspace to Google Drive" >&2
+        fi
+    fi
+else
+    echo "  ⚠ Google Drive not available, skipping cloud sync"
+fi

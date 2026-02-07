@@ -22,17 +22,28 @@ Build a voice-powered memory system using OpenClaw, mlx-audio (VibeVoice), Lume 
 │ M1 Pro Mac (Host)                                                        │
 │                                                                          │
 │  ┌─────────────────────────────────────────────────────────────────┐    │
-│  │ Fast Local Storage (SSD) - ~/openclaw/media/                    │    │
-│  │ └── recordings/     ← Audio lands here (temporary)              │    │
+│  │ Unified Shared Folder: ~/openclaw/ (shared with VM via VirtioFS)│    │
+│  │ ├── media/recordings/   ← Audio lands here (temporary)          │    │
+│  │ ├── transcripts/        ← mlx-audio writes transcripts here     │    │
+│  │ └── workspace/          ← Markdown files (synced to cloud)      │    │
 │  └─────────────────────────────────────────────────────────────────┘    │
-│                 ↓ VirtioFS                    ↓ launchd                 │
-│  ┌──────────────────────────┐    ┌───────────────────────────────────┐ │
-│  │ Lume VM                  │    │ mlx-audio (VibeVoice-ASR)         │ │
-│  │ /mnt/recordings          │    │ Transcription + diarization       │ │
-│  │ /mnt/transcripts         │    │ Runs on Metal GPU (100% local)    │ │
-│  │ /mnt/workspace           │    │ → Saves to Google Drive           │ │
-│  │                          │    │ → Moves audio to NAS              │ │
-│  │ ┌──────────────────────┐ │    └───────────────────────────────────┘ │
+│                        ↓ launchd watches recordings                     │
+│  ┌───────────────────────────────────────────────────────────────────┐  │
+│  │ mlx-audio (VibeVoice-ASR)                                         │  │
+│  │ Transcription + diarization - Runs on Metal GPU (100% local)     │  │
+│  │ → Writes to ~/openclaw/transcripts/                               │  │
+│  │ → Syncs to Google Drive (workspace + transcripts)                │  │
+│  │ → Moves audio to NAS                                              │  │
+│  └───────────────────────────────────────────────────────────────────┘  │
+│                                                                          │
+│  ┌──────────────────────────┐                                           │
+│  │ Lume VM                  │                                           │
+│  │ /Volumes/My Shared Files/│  ← VirtioFS mount of ~/openclaw/         │
+│  │ ├── media/recordings/    │  ← Telegram audio lands here            │
+│  │ ├── transcripts/         │  ← Host writes transcripts, VM reads    │
+│  │ └── workspace/           │  ← Agent reads/writes markdown          │
+│  │                          │                                           │
+│  │ ┌──────────────────────┐ │                                           │
 │  │ │ OpenClaw             │ │                                           │
 │  │ │ ├── Telegram Bot     │ │                                           │
 │  │ │ ├── Memory System    │ │                                           │
@@ -41,16 +52,16 @@ Build a voice-powered memory system using OpenClaw, mlx-audio (VibeVoice), Lume 
 │  └──────────────────────────┘                                           │
 │                                                                          │
 │  ┌───────────────────────────────────────────────────────────────────┐  │
-│  │ Google Drive (cloud sync)                                         │  │
-│  │ ~/Google Drive/.../openclaw/                                │  │
+│  │ Google Drive (cloud backup - rsync after transcription)          │  │
+│  │ ~/Insync/bac2qh@gmail.com/Google Drive/openclaw/                 │  │
 │  │ ├── workspace/          (markdown files)                          │  │
-│  │ └── transcripts/        (JSON transcripts - synced to cloud)      │  │
+│  │ └── transcripts/        (JSON transcripts)                        │  │
 │  └───────────────────────────────────────────────────────────────────┘  │
 │                                                                          │
 │  ┌───────────────────────────────────────────────────────────────────┐  │
-│  │ NAS (permanent storage)                                           │  │
+│  │ NAS (permanent audio storage)                                     │  │
 │  │ /Volumes/NAS_1/Xin/openclaw/media/                                │  │
-│  │ └── recordings/    (audio moved here immediately after transcribe)│  │
+│  │ └── recordings/    (audio moved here after transcription)         │  │
 │  └───────────────────────────────────────────────────────────────────┘  │
 └──────────────────────────────────────────────────────────────────────────┘
 ```
@@ -68,33 +79,37 @@ Build a voice-powered memory system using OpenClaw, mlx-audio (VibeVoice), Lume 
 
 **Host Mac paths:**
 ```
-~/openclaw/
+~/openclaw/                       # Single unified shared folder
 ├── media/
-│   └── recordings/         # Telegram voice messages (temporary - moved to NAS)
-└── scripts/
-    └── transcribe.sh       # mlx-audio transcription + NAS archival
-
-~/Insync/bac2qh@gmail.com/Google Drive/openclaw/
-├── workspace/              # Markdown files (synced to cloud)
+│   └── recordings/               # Telegram voice messages (temporary - moved to NAS)
+├── workspace/                    # Markdown files (synced to Google Drive)
 │   ├── MEMORY.md
 │   └── notes/
-└── transcripts/            # mlx-audio JSON outputs (synced to cloud)
+├── transcripts/                  # mlx-audio JSON outputs (synced to Google Drive)
+└── scripts/
+    └── transcribe.sh             # mlx-audio transcription + sync + NAS archival
+
+~/Insync/bac2qh@gmail.com/Google Drive/openclaw/
+├── workspace/                    # Cloud backup of workspace (rsync after transcription)
+└── transcripts/                  # Cloud backup of transcripts (rsync after transcription)
 
 /Volumes/NAS_1/Xin/openclaw/media/
-└── recordings/             # Archived audio (moved here after transcription)
+└── recordings/                   # Archived audio (moved here after transcription)
 ```
 
 **VM paths:**
 ```
-~/.openclaw/                # Stays in VM (databases, config)
+~/.openclaw/                                    # Stays in VM (databases, config)
 ├── config.yaml
 ├── sessions/
-├── agents/                 # SQLite databases
-└── workspace -> /mnt/workspace   # Symlink to shared folder
+├── agents/                                     # SQLite databases
+└── workspace -> /Volumes/My Shared Files/workspace  # Symlink to shared folder
 
-/mnt/recordings/            # Mounted from ~/openclaw/media/recordings
-/mnt/transcripts/           # Mounted from Google Drive transcripts
-/mnt/workspace/             # Mounted from Google Drive workspace
+/Volumes/My Shared Files/                       # VirtioFS mount of ~/openclaw/
+├── media/
+│   └── recordings/                             # Telegram audio lands here
+├── transcripts/                                # Host writes transcripts, VM reads
+└── workspace/                                  # Agent reads/writes markdown
 ```
 
 ---
@@ -180,24 +195,24 @@ chmod +x ~/openclaw/scripts/transcribe.sh
 ### 1.4 Create Directories
 
 ```bash
-# Fast local storage (SSD) - temporary audio only
+# Unified shared folder structure
 mkdir -p ~/openclaw/media/recordings
+mkdir -p ~/openclaw/workspace
+mkdir -p ~/openclaw/transcripts
+mkdir -p ~/openclaw/scripts
 
-# Google Drive (synced to cloud) - workspace + transcripts
+# Google Drive destinations (cloud backup)
 mkdir -p ~/Insync/bac2qh@gmail.com/Google\ Drive/openclaw/workspace
 mkdir -p ~/Insync/bac2qh@gmail.com/Google\ Drive/openclaw/transcripts
 
 # NAS (archival - audio only)
 mkdir -p /Volumes/NAS_1/Xin/openclaw/media/recordings
-
-# Scripts
-mkdir -p ~/openclaw/scripts
 ```
 
 **Note:** Adjust paths based on your setup:
-- Google Drive path depends on your sync location
+- Google Drive path depends on your sync location (for cloud backup via rsync)
 - NAS path depends on your mount point (audio files are moved here after transcription)
-- Transcripts are stored in Google Drive for cloud sync and easy access from any device
+- The `~/openclaw/` folder is shared with the VM via VirtioFS
 
 ### 1.5 Test the Transcription Pipeline
 
@@ -208,16 +223,20 @@ say "Hello, this is a test of the transcription system." -o ~/openclaw/media/rec
 # Run transcription (auto-converts aiff → mp3, then transcribes)
 ~/openclaw/scripts/transcribe.sh
 
-# Check transcript output (in Google Drive)
+# Check transcript output (local first, then synced to cloud)
+ls ~/openclaw/transcripts/
+cat ~/openclaw/transcripts/*test*.json
+
+# Check transcript was synced to Google Drive
 ls ~/Insync/bac2qh@gmail.com/Google\ Drive/openclaw/transcripts/
-cat ~/Insync/bac2qh@gmail.com/Google\ Drive/openclaw/transcripts/*test*.json
 
 # Check audio was moved to NAS
 ls /Volumes/NAS_1/Xin/openclaw/media/recordings/
 ```
 
 **Expected output:**
-- JSON file with transcription, timestamps, and speaker labels in Google Drive transcripts folder
+- JSON file with transcription, timestamps, and speaker labels in `~/openclaw/transcripts/`
+- Same transcript synced to Google Drive
 - Audio file moved to NAS at `/Volumes/NAS_1/Xin/openclaw/media/recordings/`
 
 ### 1.6 Auto-Transcribe with launchd
@@ -278,37 +297,24 @@ lume create memory-app --os ubuntu --cpu 4 --memory 8192 --disk 50G
 # lume create memory-app --os macos --cpu 4 --memory 8192 --disk 50G
 ```
 
-### 2.2 Understanding Lume Shared Folder Limitation
+### 2.2 Start VM with Unified Shared Folder
 
 **Important:** The Lume CLI `--shared-dir` flag only accepts **ONE** shared folder due to macOS Virtualization framework limitations.
 
-**Workaround:** Use symlinks to consolidate multiple directories under a single parent folder.
+**Solution:** Use `~/openclaw` as a single unified folder containing all subdirectories (media, workspace, transcripts).
 
 **Setup:**
 
 ```bash
-# Create parent folder for symlinks
-mkdir -p ~/openclaw-share
-
-# Create symlinks for all needed directories
-ln -s ~/openclaw/media/recordings ~/openclaw-share/recordings
-ln -s "~/Insync/bac2qh@gmail.com/Google Drive/openclaw/workspace" ~/openclaw-share/workspace
-ln -s "~/Insync/bac2qh@gmail.com/Google Drive/openclaw/transcripts" ~/openclaw-share/transcripts
-
-# Start VM with single shared directory (contains all symlinks)
-lume run nix --shared-dir ~/openclaw-share
+# Start VM with unified shared directory
+lume run nix --shared-dir ~/openclaw
 ```
 
-**Or use the convenience script:**
-
-```bash
-# Copy script from repo
-cp scripts/knowledge-base/start-vm.sh ~/openclaw/scripts/
-chmod +x ~/openclaw/scripts/start-vm.sh
-
-# Start VM with auto-configured symlinks
-~/openclaw/scripts/start-vm.sh nix
-```
+**Why this works:**
+- VirtioFS shares the entire `~/openclaw/` folder tree
+- VM sees all subdirectories at `/Volumes/My Shared Files/`
+- No symlinks needed (symlinks outside shared dir don't work with VirtioFS)
+- Host syncs workspace + transcripts to Google Drive after transcription
 
 ### 2.3 Verify Shared Folders
 
@@ -316,13 +322,14 @@ chmod +x ~/openclaw/scripts/start-vm.sh
 # SSH into VM
 lume ssh nix
 
-# Check mounts (should see all three folders)
-ls "/Volumes/My Shared Files/recordings"
+# Check mounts (should see the unified folder structure)
+ls "/Volumes/My Shared Files/"
+ls "/Volumes/My Shared Files/media/recordings"
 ls "/Volumes/My Shared Files/transcripts"
 ls "/Volumes/My Shared Files/workspace"
 ```
 
-All three folders should be accessible from the VM via the shared mount point.
+All subdirectories should be accessible from the VM via the shared mount point.
 
 ---
 
@@ -423,11 +430,11 @@ openclaw config set providers.openai.apiKey "sk-..."
 
 ### 3.4 Configure Media Download Path
 
-Point OpenClaw to save Telegram voice messages to the local SSD:
+Point OpenClaw to save Telegram voice messages to the shared recordings folder:
 
 ```bash
 # Set download path (temporary storage - moved to NAS after transcription)
-openclaw config set tools.media.downloadPath "/mnt/recordings"
+openclaw config set tools.media.downloadPath "/Volumes/My Shared Files/media/recordings"
 
 # Disable cloud transcription (use mlx-audio on host for 100% local processing)
 openclaw config set tools.media.audio.enabled false
@@ -435,25 +442,25 @@ openclaw config set tools.media.audio.enabled false
 
 ### 3.5 Configure Workspace
 
-Point OpenClaw workspace to Google Drive:
+Point OpenClaw workspace to the shared folder:
 
 ```bash
-# Symlink workspace to Google Drive mount
-ln -sf /mnt/workspace ~/.openclaw/workspace
+# Symlink workspace to shared folder mount
+ln -sf "/Volumes/My Shared Files/workspace" ~/.openclaw/workspace
 
 # Verify
 ls -la ~/.openclaw/workspace/
-ls /mnt/recordings/
-ls /mnt/transcripts/
+ls "/Volumes/My Shared Files/media/recordings"
+ls "/Volumes/My Shared Files/transcripts"
 ```
 
 ### 3.6 Create Memory Files (on Host)
 
-Create initial memory file on your **host Mac** in Google Drive:
+Create initial memory file on your **host Mac** in the shared workspace:
 
 ```bash
 # On host Mac:
-cat > ~/Insync/bac2qh@gmail.com/Google\ Drive/openclaw/workspace/MEMORY.md << 'EOF'
+cat > ~/openclaw/workspace/MEMORY.md << 'EOF'
 # Long-Term Memory
 
 ## About Me
@@ -475,10 +482,13 @@ cat > ~/Insync/bac2qh@gmail.com/Google\ Drive/openclaw/workspace/MEMORY.md << 'E
 EOF
 
 # Create notes directory
-mkdir -p ~/Insync/bac2qh@gmail.com/Google\ Drive/openclaw/workspace/notes
+mkdir -p ~/openclaw/workspace/notes
 ```
 
-This file will automatically appear in the VM at `/mnt/workspace/MEMORY.md` and sync to Google Drive. Transcripts at `/mnt/transcripts/` are also searchable by the agent.
+This file will automatically:
+- Appear in the VM at `/Volumes/My Shared Files/workspace/MEMORY.md`
+- Be synced to Google Drive after transcription runs
+- Transcripts at `/Volumes/My Shared Files/transcripts/` are also searchable by the agent
 
 ### 3.7 Test Memory Search
 
@@ -522,20 +532,20 @@ openclaw config set channels.telegram.allowlist '["YOUR_USER_ID"]'
 # Increase media size limit (for voice messages)
 openclaw config set channels.telegram.mediaMaxMb 20
 
-# Set media download path to fast local SSD
-openclaw config set tools.media.downloadPath "/mnt/recordings"
+# Set media download path to shared recordings folder
+openclaw config set tools.media.downloadPath "/Volumes/My Shared Files/media/recordings"
 
 # Disable cloud transcription (use mlx-audio on host for 100% local processing)
 openclaw config set tools.media.audio.enabled false
 ```
 
 **What this does:**
-- Telegram voice messages → downloaded to `/mnt/recordings` (in VM)
-- `/mnt/recordings` → backed by local SSD at `~/openclaw/media/recordings/`
+- Telegram voice messages → downloaded to `/Volumes/My Shared Files/media/recordings` (in VM)
+- This folder is backed by `~/openclaw/media/recordings/` on host via VirtioFS
 - launchd watches for new files → triggers mlx-audio transcription on host
-- Transcripts saved to Google Drive → visible to VM at `/mnt/transcripts/`
+- Transcripts written to `~/openclaw/transcripts/` → visible to VM at `/Volumes/My Shared Files/transcripts/`
+- After transcription, rsync syncs workspace + transcripts to Google Drive
 - Audio files automatically moved to NAS after successful transcription
-- Transcripts synced to cloud via Google Drive for access from any device
 
 ### 4.5 Start Gateway
 
@@ -582,7 +592,7 @@ For short voice messages (< 5 minutes), the standard sync flow works fine.
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                      VM (OpenClaw)                          │
-│  Telegram voice → ~/.openclaw/media/ → [Watcher 1] ─────────┼──┐
+│  Telegram → /Volumes/My Shared Files/media/recordings/ ─────┼──┐
 │                                                             │  │
 │  [Watcher 2] ← /Volumes/My Shared Files/transcripts/ ←──────┼──┼──┐
 │       ↓                                                     │  │  │
@@ -591,19 +601,23 @@ For short voice messages (< 5 minutes), the standard sync flow works fine.
                                                                  │  │
 ┌────────────────────────────────────────────────────────────────┼──┼─┐
 │                      HOST (macOS)                              │  │ │
-│  ~/openclaw-share/recordings/ ←────────────────────────────────┘  │ │
+│  ~/openclaw/media/recordings/ ←────────────────────────────────┘  │ │
 │       ↓                                                           │ │
-│  mlx_audio (VibeVoice-ASR) watches, transcribes                   │ │
+│  mlx_audio (VibeVoice-ASR) watches, transcribes (launchd)        │ │
 │       ↓                                                           │ │
-│  ~/openclaw-share/transcripts/ (.txt JSON output) ────────────────┘ │
+│  ~/openclaw/transcripts/ (.json output) ──────────────────────────┘ │
+│       ↓                                                             │
+│  rsync → Google Drive (workspace + transcripts)                    │
+│  mv → NAS (audio archival)                                         │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
 **Flow:**
 
-1. **Watcher 1 (VM):** Copies audio files from OpenClaw media directory to shared recordings folder
-2. **mlx_audio (Host):** Watches recordings folder, transcribes with VibeVoice-ASR, saves to transcripts folder
-3. **Watcher 2 (VM):** Picks up transcripts, sends via `openclaw message send` to Telegram
+1. **Telegram → VM:** Audio downloaded directly to shared folder `/Volumes/My Shared Files/media/recordings/`
+2. **mlx_audio (Host):** launchd watches `~/openclaw/media/recordings/`, transcribes with VibeVoice-ASR, saves to `~/openclaw/transcripts/`
+3. **Sync (Host):** After transcription, rsync syncs workspace + transcripts to Google Drive, moves audio to NAS
+4. **Watcher 2 (VM):** Picks up transcripts from `/Volumes/My Shared Files/transcripts/`, sends via `openclaw message send` to Telegram
 
 ### 5.3 Setup: Disable Built-in Transcription
 
@@ -643,7 +657,9 @@ sudo apt install fswatch  # Ubuntu/Debian
 
 ### 5.6 Running the Watchers
 
-**Terminal 1: Start Watcher 1 (Audio Copier) - Inside VM**
+**Note:** With the unified folder approach, Watcher 1 (audio copier) is optional - audio already lands in the shared folder. You only need Watcher 2 to send transcripts back to Telegram.
+
+**Optional: Monitor Audio (Inside VM)**
 
 ```bash
 # SSH into VM
@@ -652,12 +668,12 @@ lume ssh nix
 # Copy the watcher script (if not already done)
 # (Run this on host first: scp scripts/knowledge-base/audio-watcher.sh nix:~/)
 
-# Run the audio watcher
+# Run the audio monitor (optional - just for logging)
 chmod +x ~/audio-watcher.sh
 ~/audio-watcher.sh
 ```
 
-**Terminal 2: Start Watcher 2 (Transcript Sender) - Inside VM**
+**Terminal 1: Start Watcher 2 (Transcript Sender) - Inside VM**
 
 ```bash
 # SSH into VM
@@ -680,13 +696,12 @@ chmod +x ~/transcript-watcher.sh
 # Inside VM
 tmux new -s watchers
 
-# Window 1: Audio watcher
-~/audio-watcher.sh
-
-# Create new window (Ctrl+B, C)
-# Window 2: Transcript watcher
+# Window 1: Transcript watcher (required)
 export TELEGRAM_CHAT_ID="YOUR_CHAT_ID_HERE"
 ~/transcript-watcher.sh
+
+# Optional: Create new window for audio monitor (Ctrl+B, C)
+# ~/audio-watcher.sh
 
 # Detach: Ctrl+B, D
 # Reattach: tmux attach -t watchers
@@ -695,46 +710,52 @@ export TELEGRAM_CHAT_ID="YOUR_CHAT_ID_HERE"
 ### 5.7 Testing the Pipeline
 
 1. **Send a voice message** to your Telegram bot (or upload audio file)
-2. **Check Watcher 1:** Should see "New audio: filename.ogg" and copy confirmation
+2. **Check audio lands in shared folder:** `ls ~/openclaw/media/recordings/` (on host)
 3. **Check host transcription:** `tail -f /tmp/transcribe.log` (if using launchd)
-4. **Check Watcher 2:** Should see "New transcript: filename.txt" and send confirmation
-5. **Check Telegram:** Should receive the transcribed text as a message from your bot
+4. **Check transcript appears:** `ls ~/openclaw/transcripts/` (on host)
+5. **Check Watcher 2:** Should see "New transcript: filename.txt" and send confirmation (in VM)
+6. **Check Telegram:** Should receive the transcribed text as a message from your bot
 
 ### 5.8 Troubleshooting Async Pipeline
 
-**Audio not being copied:**
-- Check Watcher 1 is running: `ps aux | grep audio-watcher`
-- Check OpenClaw media path: `ls ~/.openclaw/media/`
-- Check shared folder mount: `ls /Volumes/My\ Shared\ Files/recordings/`
+**Audio not appearing in shared folder:**
+- Check OpenClaw download path: `openclaw config get tools.media.downloadPath` (should be `/Volumes/My Shared Files/media/recordings`)
+- Check VM can see shared folder: `ls /Volumes/My\ Shared\ Files/media/recordings/` (in VM)
+- Check host folder: `ls ~/openclaw/media/recordings/` (on host)
+- Verify VM is running with shared dir: `lume run nix --shared-dir ~/openclaw`
 
 **Transcription not happening:**
 - Check host launchd: `launchctl list | grep transcribe`
 - Check mlx-audio: `python -c "import mlx_audio"`
 - Check transcription logs: `tail -f /tmp/transcribe.log`
+- Check recordings folder: `ls ~/openclaw/media/recordings/`
 
 **Transcripts not being sent:**
-- Check Watcher 2 is running: `ps aux | grep transcript-watcher`
-- Check Telegram chat ID is set: `echo $TELEGRAM_CHAT_ID`
-- Check transcript format: `cat /Volumes/My\ Shared\ Files/transcripts/*.txt`
-- Test manual send: `openclaw message send --channel telegram --target "$TELEGRAM_CHAT_ID" --message "test"`
+- Check Watcher 2 is running: `ps aux | grep transcript-watcher` (in VM)
+- Check Telegram chat ID is set: `echo $TELEGRAM_CHAT_ID` (in VM)
+- Check VM can see transcripts: `ls /Volumes/My\ Shared\ Files/transcripts/` (in VM)
+- Check host transcripts: `ls ~/openclaw/transcripts/` (on host)
+- Test manual send: `openclaw message send --channel telegram --target "$TELEGRAM_CHAT_ID" --message "test"` (in VM)
 
 ### 5.9 Verification Checklist
 
 After implementing the async pipeline, verify everything is working:
 
-- [ ] VM starts with shared folder: `~/openclaw/scripts/start-vm.sh nix`
+- [ ] VM starts with shared folder: `lume run nix --shared-dir ~/openclaw`
 - [ ] Shared folders visible in VM: `ls "/Volumes/My Shared Files/"`
-- [ ] Watcher 1 running in VM (audio copier)
-- [ ] Watcher 2 running in VM (transcript sender)
 - [ ] Host transcription working: check `/tmp/transcribe.log`
+- [ ] Watcher 2 running in VM (transcript sender)
 - [ ] Send voice message to Telegram bot
-- [ ] Verify audio copied to shared recordings folder
-- [ ] Verify mlx_audio transcribes (check transcripts folder on host)
+- [ ] Verify audio lands in `~/openclaw/media/recordings/` (host)
+- [ ] Verify mlx_audio transcribes to `~/openclaw/transcripts/` (host)
+- [ ] Verify transcripts synced to Google Drive
+- [ ] Verify audio moved to NAS
 - [ ] Verify transcript sent back to Telegram
 
 **Expected timeline for long recordings:**
-- Voice message sent → Watcher 1 copies immediately (< 1 second)
+- Voice message sent → appears in shared folder immediately (< 1 second)
 - Host transcription → varies by length (e.g., 2-hour meeting ≈ 30-60 minutes)
+- After transcription → rsync to Google Drive, move to NAS (< 10 seconds)
 - Watcher 2 sends → immediately after transcript appears (< 1 second)
 
 ---
@@ -786,9 +807,10 @@ Examples:
 # 2. Transcription runs automatically (or manually):
 ~/openclaw/scripts/transcribe.sh
 
-# Transcript appears in Google Drive
+# Transcript appears in ~/openclaw/transcripts/
+# Synced to Google Drive via rsync
 # Audio moved to NAS at /Volumes/NAS_1/Xin/openclaw/media/recordings/
-# VM sees transcript at /mnt/transcripts/
+# VM sees transcript at /Volumes/My Shared Files/transcripts/
 ```
 
 Then tell bot:
@@ -875,23 +897,27 @@ openclaw cron remove <job-id>
 
 ```
 ┌───────────────────────────────────────────────────────────────────────┐
-│ Unified Audio Flow:                                                   │
+│ Unified Folder Flow:                                                  │
 │                                                                       │
 │ 1. Send voice memo to Telegram                                       │
 │    ↓                                                                  │
-│ 2. OpenClaw downloads to /mnt/recordings → ~/openclaw/media/recordings  │
+│ 2. OpenClaw downloads to /Volumes/My Shared Files/media/recordings   │
+│    (backed by ~/openclaw/media/recordings on host)                   │
 │    ↓                                                                  │
 │ 3. launchd triggers transcribe.sh on host                            │
 │    ↓                                                                  │
 │ 4. mlx-audio transcribes locally (Metal GPU, 100% local)             │
 │    ↓                                                                  │
-│ 5. Save transcript JSON to Google Drive                              │
+│ 5. Save transcript JSON to ~/openclaw/transcripts/                   │
 │    ↓                                                                  │
-│ 6. Move audio to NAS (/Volumes/NAS_1/.../recordings/)                │
+│ 6. rsync workspace + transcripts to Google Drive                     │
 │    ↓                                                                  │
-│ 7. VM sees transcript at /mnt/transcripts, agent processes it        │
+│ 7. Move audio to NAS (/Volumes/NAS_1/.../recordings/)                │
 │    ↓                                                                  │
-│ 8. Agent writes notes to /mnt/workspace → Google Drive               │
+│ 8. VM sees transcript at /Volumes/My Shared Files/transcripts        │
+│    ↓                                                                  │
+│ 9. Agent processes transcript, writes notes to workspace             │
+│    (automatically synced to Google Drive on next transcription)      │
 └───────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -1075,17 +1101,15 @@ pip install mlx-audio
 
 **Shared folder not visible:**
 ```bash
-# Check Lume config
-cat ~/.lume/vms/memory-app/config.yaml
-
-# Restart VM
-lume restart memory-app
+# Verify VM is running with correct shared dir
+lume run nix --shared-dir ~/openclaw
 
 # Check mounts inside VM
-lume ssh memory-app
-mount | grep recordings
-mount | grep transcripts
-mount | grep workspace
+lume ssh nix
+ls /Volumes/My\ Shared\ Files/
+ls /Volumes/My\ Shared\ Files/media/recordings
+ls /Volumes/My\ Shared\ Files/transcripts
+ls /Volumes/My\ Shared\ Files/workspace
 ```
 
 ### Memory Not Indexing
@@ -1099,8 +1123,8 @@ openclaw memory status --deep
 
 # Verify paths
 ls ~/.openclaw/workspace/
-ls /mnt/recordings/
-ls /mnt/transcripts/
+ls /Volumes/My\ Shared\ Files/media/recordings
+ls /Volumes/My\ Shared\ Files/transcripts
 ```
 
 ### Audio Files Not Transcribing
@@ -1121,6 +1145,7 @@ tail -f /tmp/transcribe.err
 **Check file permissions:**
 ```bash
 ls -la ~/openclaw/media/recordings/
+ls -la ~/openclaw/transcripts/
 ls -la ~/Insync/bac2qh@gmail.com/Google\ Drive/openclaw/transcripts/
 ```
 
@@ -1228,12 +1253,12 @@ agents:
   work:
     personality: "Professional assistant for work context"
     memorySearch:
-      paths: ["/mnt/transcripts/work"]
+      paths: ["/Volumes/My Shared Files/transcripts/work"]
 
   personal:
     personality: "Casual assistant for personal notes"
     memorySearch:
-      paths: ["/mnt/transcripts/personal"]
+      paths: ["/Volumes/My Shared Files/transcripts/personal"]
 ```
 
 ### 4. Backup Strategy
@@ -1272,7 +1297,7 @@ A: Yes, the VM setup works the same. For host transcription on Linux (or Intel M
 A: pyannote doesn't do speaker identification (who is who), only diarization (how many speakers). For names, use a service like AssemblyAI or manually label.
 
 **Q: Can I search across all memories at once?**
-A: Yes, that's the default. OpenClaw indexes everything under `~/.openclaw/workspace/` and `/mnt/transcripts/`.
+A: Yes, that's the default. OpenClaw indexes everything under `~/.openclaw/workspace/` and `/Volumes/My Shared Files/transcripts/`.
 
 ---
 
