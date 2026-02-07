@@ -357,6 +357,47 @@ pnpm build
 pnpm link --global
 ```
 
+### 3.2a Understanding Onboarding and Persistence
+
+**Important: Onboard once, run continuously**
+
+OpenClaw is designed to be onboarded **once** and then run as a persistent background service:
+
+1. **Onboard once:** The first time you run `openclaw onboard`, it saves all configuration and credentials to `~/.openclaw/`
+2. **Configuration persists:** All settings are stored on disk and survive VM restarts
+3. **Gateway runs continuously:** The gateway process should stay running in the background
+4. **After restart:** Just restart the gateway process - no need to re-onboard
+
+**Configuration storage (references):**
+- Config file: `~/.openclaw/openclaw.json` ([src/config/paths.ts:93-104](../../src/config/paths.ts))
+- Credentials: `~/.openclaw/credentials/oauth.json` ([src/config/paths.ts:211-227](../../src/config/paths.ts))
+- Sessions: `~/.openclaw/sessions/` (default)
+
+**What happens on VM restart:**
+- ✅ Configuration persists (stored on disk)
+- ✅ Credentials persist (stored on disk)
+- ❌ Gateway process stops (needs manual restart)
+
+**When you need to restart the gateway:**
+```bash
+# After VM reboot
+nohup openclaw gateway run --bind loopback --port 18789 --force > /tmp/openclaw-gateway.log 2>&1 &
+
+# Verify it's running
+openclaw channels status --probe
+ss -ltnp | grep 18789
+tail -n 120 /tmp/openclaw-gateway.log
+```
+
+**When to onboard again:**
+- Only if you delete `~/.openclaw/` directory
+- Only if you rebuild/reinstall the VM from scratch
+- Only if you want to change credentials or add new channels
+
+For more details on gateway startup and configuration loading, see:
+- Gateway startup: [src/cli/gateway-cli/run.ts:95,161](../../src/cli/gateway-cli/run.ts)
+- Config persistence: [src/config/io.ts:480-537](../../src/config/io.ts)
+
 ### 3.3 Configure OpenClaw
 
 ```bash
@@ -495,13 +536,17 @@ openclaw config set tools.media.audio.enabled false
 
 ### 4.5 Start Gateway
 
+**Important:** The gateway should run continuously as a background service. See [3.2a Understanding Onboarding and Persistence](#32a-understanding-onboarding-and-persistence) for details.
+
 ```bash
 # Foreground (for testing)
 openclaw gateway run
 
-# Background (for production)
-nohup openclaw gateway run > /tmp/openclaw.log 2>&1 &
+# Background (for production - keeps running until VM restart)
+nohup openclaw gateway run --bind loopback --port 18789 --force > /tmp/openclaw-gateway.log 2>&1 &
 ```
+
+**After VM restart:** You'll need to run the background command again. The configuration persists automatically, so no need to re-onboard or reconfigure.
 
 ### 4.6 Test Your Bot
 
