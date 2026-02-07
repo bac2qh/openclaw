@@ -124,6 +124,7 @@ Build a voice-powered memory system using OpenClaw, mlx-audio (VibeVoice), Lume 
 6. [Daily Workflow](#part-6-daily-workflow)
 7. [Cost Breakdown](#part-7-cost-summary)
 8. [Troubleshooting](#troubleshooting)
+9. [Audio Flow Details](./telegram-audio-flow.md) - Technical documentation of audio flows
 
 ---
 
@@ -430,15 +431,20 @@ openclaw config set providers.openai.apiKey "sk-..."
 
 ### 3.4 Configure Media Download Path
 
-Point OpenClaw to save Telegram voice messages to the shared recordings folder:
+**Important**: The `tools.media.downloadPath` config does NOT currently exist in OpenClaw. Audio files always download to `~/.openclaw/media/inbound/` inside the VM. To use the local transcription pipeline, you need a workaround.
+
+**Workaround: Symlink inbound folder to shared directory**
 
 ```bash
-# Set download path (temporary storage - moved to NAS after transcription)
-openclaw config set tools.media.downloadPath "/Volumes/My Shared Files/media/recordings"
+# Inside VM: symlink inbound to shared folder
+mv ~/.openclaw/media/inbound ~/.openclaw/media/inbound.backup
+ln -s "/Volumes/My Shared Files/media/recordings" ~/.openclaw/media/inbound
 
 # Disable cloud transcription (use mlx-audio on host for 100% local processing)
 openclaw config set tools.media.audio.enabled false
 ```
+
+**See [telegram-audio-flow.md](./telegram-audio-flow.md) for detailed flow documentation and alternative workarounds.**
 
 ### 3.5 Configure Workspace
 
@@ -532,20 +538,21 @@ openclaw config set channels.telegram.allowlist '["YOUR_USER_ID"]'
 # Increase media size limit (for voice messages)
 openclaw config set channels.telegram.mediaMaxMb 20
 
-# Set media download path to shared recordings folder
-openclaw config set tools.media.downloadPath "/Volumes/My Shared Files/media/recordings"
-
 # Disable cloud transcription (use mlx-audio on host for 100% local processing)
 openclaw config set tools.media.audio.enabled false
+
+# Note: See section 3.4 for download path workaround (symlink required)
 ```
 
 **What this does:**
-- Telegram voice messages → downloaded to `/Volumes/My Shared Files/media/recordings` (in VM)
-- This folder is backed by `~/openclaw/media/recordings/` on host via VirtioFS
-- launchd watches for new files → triggers mlx-audio transcription on host
+- Telegram voice messages → downloaded to `~/.openclaw/media/inbound/` (in VM)
+- If you created the symlink in section 3.4, files appear in the shared folder immediately
+- launchd on host watches for new files → triggers mlx-audio transcription
 - Transcripts written to `~/openclaw/transcripts/` → visible to VM at `/Volumes/My Shared Files/transcripts/`
 - After transcription, rsync syncs workspace + transcripts to Google Drive
 - Audio files automatically moved to NAS after successful transcription
+
+**See [telegram-audio-flow.md](./telegram-audio-flow.md) for detailed technical flow documentation.**
 
 ### 4.5 Start Gateway
 
@@ -719,10 +726,11 @@ export TELEGRAM_CHAT_ID="YOUR_CHAT_ID_HERE"
 ### 5.8 Troubleshooting Async Pipeline
 
 **Audio not appearing in shared folder:**
-- Check OpenClaw download path: `openclaw config get tools.media.downloadPath` (should be `/Volumes/My Shared Files/media/recordings`)
+- Check symlink exists: `ls -la ~/.openclaw/media/inbound` (should point to shared folder)
 - Check VM can see shared folder: `ls /Volumes/My\ Shared\ Files/media/recordings/` (in VM)
 - Check host folder: `ls ~/openclaw/media/recordings/` (on host)
 - Verify VM is running with shared dir: `lume run nix --shared-dir ~/openclaw`
+- If symlink missing, recreate per section 3.4
 
 **Transcription not happening:**
 - Check host launchd: `launchctl list | grep transcribe`

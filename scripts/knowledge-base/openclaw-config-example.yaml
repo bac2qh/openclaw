@@ -46,8 +46,11 @@ channels:
 # Voice/Audio Transcription
 tools:
   media:
-    # Save downloaded media to fast local SSD (temporary, moved to NAS after transcription)
-    downloadPath: "/mnt/recordings"
+    # Note: downloadPath is NOT a valid config option.
+    # Media downloads to ~/.openclaw/media/inbound/ by default.
+    # Use symlink workaround to redirect to shared folder:
+    #   ln -s "/Volumes/My Shared Files/media/recordings" ~/.openclaw/media/inbound
+    # See docs/guides/personal-knowledge-base/telegram-audio-flow.md for details.
 
     audio:
       # Disable cloud transcription (use mlx-audio on host for 100% local processing)
