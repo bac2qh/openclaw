@@ -1,6 +1,8 @@
 #!/bin/bash
 # Watches for transcripts, sends to Telegram via openclaw
 # Part of the 2-watcher async transcription pipeline
+#
+# Watches the shared transcripts folder where host mlx-audio writes transcripts
 
 TRANSCRIPTS_DIR="/Volumes/My Shared Files/transcripts"
 PROCESSED_DIR="/Volumes/My Shared Files/transcripts/processed"
