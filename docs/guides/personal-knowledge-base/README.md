@@ -429,6 +429,9 @@ openclaw config set agents.defaults.memorySearch.provider "openai"
 openclaw config set agents.defaults.memorySearch.remote.baseUrl "http://192.168.64.1:11434/v1"
 openclaw config set agents.defaults.memorySearch.remote.apiKey "ollama"
 openclaw config set agents.defaults.memorySearch.model "qwen3-embedding:0.6b"
+
+# Disable batch embeddings (Ollama does not support OpenAI Batch API)
+openclaw config set agents.defaults.memorySearch.remote.batch.enabled false
 ```
 
 **Note:** Ollama runs on the host Mac, not inside the VM. For the VM to reach it:
