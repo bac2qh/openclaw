@@ -8,9 +8,8 @@
 
   Installation:
     1. Copy to ~/Library/LaunchAgents/com.user.transcript-watcher.plist
-    2. Replace YOUR_USERNAME with your actual username
-    3. Replace YOUR_CHAT_ID_HERE with your Telegram chat ID (from @userinfobot)
-    4. Load with: launchctl load ~/Library/LaunchAgents/com.user.transcript-watcher.plist
+    2. Replace YOUR_CHAT_ID_HERE with your Telegram chat ID (from @userinfobot)
+    3. Load with: launchctl load ~/Library/LaunchAgents/com.user.transcript-watcher.plist
 
   Uninstall:
     launchctl unload ~/Library/LaunchAgents/com.user.transcript-watcher.plist
@@ -31,7 +30,7 @@
     <key>ProgramArguments</key>
     <array>
         <string>/bin/bash</string>
-        <string>/Users/YOUR_USERNAME/transcript-watcher.sh</string>
+        <string>/Volumes/My Shared Files/scripts/transcript-watcher.sh</string>
     </array>
 
     <!-- Environment variables -->
@@ -45,7 +44,7 @@
 
     <!-- Working directory -->
     <key>WorkingDirectory</key>
-    <string>/Users/YOUR_USERNAME</string>
+    <string>/Volumes/My Shared Files</string>
 
     <!-- Logging -->
     <key>StandardOutPath</key>
