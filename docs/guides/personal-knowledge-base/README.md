@@ -705,7 +705,7 @@ chmod +x ~/audio-watcher.sh
 
 **Terminal 1: Start Watcher 2 (Transcript Processor) - Inside VM**
 
-**Important:** This watcher uses `openclaw agent --message` to trigger **AI processing** of transcripts (summarizes meetings, extracts action items, updates memory) rather than just delivering raw text. Requires `agents.defaults.memorySearch.experimental.sessionMemory: true` for automatic indexing.
+**Important:** This watcher uses `openclaw agent --message` to trigger **AI processing** of transcripts. It adapts based on transcript metadata (duration, speakers, word count) to intelligently handle voice memos (brief storage) vs. meetings (full summary + action items). Requires `agents.defaults.memorySearch.experimental.sessionMemory: true` for automatic indexing.
 
 ```bash
 # SSH into VM
