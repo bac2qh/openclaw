@@ -426,10 +426,26 @@ openclaw config set agents.defaults.memorySearch.enabled true
 
 # Set embedding provider (Ollama — free, local)
 openclaw config set agents.defaults.memorySearch.provider "openai"
-openclaw config set agents.defaults.memorySearch.remote.baseUrl "http://localhost:11434/v1"
+openclaw config set agents.defaults.memorySearch.remote.baseUrl "http://192.168.64.1:11434/v1"
 openclaw config set agents.defaults.memorySearch.remote.apiKey "ollama"
 openclaw config set agents.defaults.memorySearch.model "qwen3-embedding:0.6b"
 ```
+
+**Note:** Ollama runs on the host Mac, not inside the VM. For the VM to reach it:
+
+1. **Start Ollama on all interfaces** (it defaults to `127.0.0.1` only):
+   ```bash
+   # On host Mac:
+   OLLAMA_HOST=0.0.0.0 ollama serve
+   ```
+   To make this permanent, add `export OLLAMA_HOST=0.0.0.0` to your shell profile.
+
+2. **`192.168.64.1`** is the host gateway IP from inside a Lume VM (Apple Virtualization NAT). Verify:
+   ```bash
+   # Inside the VM:
+   ip route | grep default
+   # expected: default via 192.168.64.1 ...
+   ```
 
 ### 3.4 Configure Media Download Path
 
