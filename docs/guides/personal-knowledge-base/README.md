@@ -429,6 +429,40 @@ openclaw config set agents.defaults.memorySearch.provider "openai"
 openclaw config set providers.openai.apiKey "sk-..."
 ```
 
+### 3.3a Configure Embeddings (Ollama - free, local)
+
+As a free, local alternative to OpenAI embeddings, you can use Ollama for embeddings:
+
+```bash
+# Install Ollama (if not already)
+brew install ollama
+ollama serve            # keep running in background
+ollama pull qwen3-embedding:0.6b
+
+# Configure OpenClaw to use Ollama for embeddings
+openclaw config set agents.defaults.memorySearch.provider "openai"
+openclaw config set agents.defaults.memorySearch.remote.baseUrl "http://localhost:11434/v1"
+openclaw config set agents.defaults.memorySearch.remote.apiKey "ollama"
+openclaw config set agents.defaults.memorySearch.model "qwen3-embedding:0.6b"
+```
+
+**Why these settings:**
+- `provider: "openai"` - Ollama exposes an OpenAI-compatible `/v1/embeddings` endpoint
+- `apiKey` - Ollama ignores this value, but the field must be non-empty (use any placeholder)
+- `remote.baseUrl` - The correct config path for embedding-only setups (avoids schema issues with `models.providers.openai.baseUrl`)
+
+**Supported embedding models:**
+- `qwen3-embedding:0.6b` (fast, small, multilingual - recommended)
+- `nomic-embed-text` (English, 768d)
+- `mxbai-embed-large` (English, 1024d)
+- `all-minilm:latest` (lightweight, 384d)
+
+**After configuration, re-index existing memory:**
+
+```bash
+openclaw memory index --force
+```
+
 ### 3.4 Configure Media Download Path
 
 **Important**: The `tools.media.downloadPath` config does NOT currently exist in OpenClaw. Audio files always download to `~/.openclaw/media/inbound/` inside the VM. To use the local transcription pipeline, you need a workaround.
@@ -976,9 +1010,11 @@ Since markdown lives in Google Drive:
 | Component | Monthly Cost |
 |-----------|--------------|
 | Claude Sonnet 4 (~1.2M tokens) | ~$6 |
-| OpenAI Embeddings (~100K tokens) | ~$0.10 |
+| Embeddings (Ollama local) | **FREE** |
+| Embeddings (OpenAI ~100K tokens) | ~$0.10 |
 | mlx-audio (local transcription) | **FREE** |
-| **Total** | **~$6/month** |
+| **Total (with Ollama)** | **~$6/month** |
+| **Total (with OpenAI)** | **~$6/month** |
 
 ### Usage Estimates
 
