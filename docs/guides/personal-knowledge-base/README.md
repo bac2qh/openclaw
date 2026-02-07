@@ -716,27 +716,44 @@ openclaw config set agents.defaults.memorySearch.experimental.sessionMemory true
 
 # Copy the watcher script (if not already done)
 # (Run this on host first: scp scripts/knowledge-base/transcript-watcher.sh nix:~/)
-
-# Run the transcript watcher
-chmod +x ~/transcript-watcher.sh
-~/transcript-watcher.sh
 ```
 
-**Pro Tip: Use tmux for persistent sessions**
+**Running as a LaunchAgent (recommended)**
+
+The transcript watcher can run as a persistent background service via launchd:
+
+```bash
+# 1. Copy the plist template (inside VM)
+cp scripts/knowledge-base/com.user.transcript-watcher.plist ~/Library/LaunchAgents/
+
+# 2. Edit the plist to set your username and Telegram chat ID
+# Get chat ID from @userinfobot on Telegram
+nano ~/Library/LaunchAgents/com.user.transcript-watcher.plist
+
+# 3. Load the agent
+launchctl load ~/Library/LaunchAgents/com.user.transcript-watcher.plist
+
+# 4. Verify it's running
+launchctl list | grep transcript-watcher
+
+# 5. Check logs
+tail -f /tmp/transcript-watcher.log
+```
+
+**To uninstall:**
+
+```bash
+launchctl unload ~/Library/LaunchAgents/com.user.transcript-watcher.plist
+rm ~/Library/LaunchAgents/com.user.transcript-watcher.plist
+```
+
+**Alternative: Run manually (for testing)**
 
 ```bash
 # Inside VM
-tmux new -s watchers
-
-# Window 1: Transcript watcher (required)
 export TELEGRAM_CHAT_ID="YOUR_CHAT_ID_HERE"
+chmod +x ~/transcript-watcher.sh
 ~/transcript-watcher.sh
-
-# Optional: Create new window for audio monitor (Ctrl+B, C)
-# ~/audio-watcher.sh
-
-# Detach: Ctrl+B, D
-# Reattach: tmux attach -t watchers
 ```
 
 ### 5.7 Testing the Pipeline
@@ -764,7 +781,8 @@ export TELEGRAM_CHAT_ID="YOUR_CHAT_ID_HERE"
 - Check recordings folder: `ls ~/openclaw/media/recordings/`
 
 **Transcripts not being processed:**
-- Check Watcher 2 is running: `ps aux | grep transcript-watcher` (in VM)
+- Check Watcher 2 is running: `launchctl list | grep transcript-watcher` (in VM)
+- Check logs: `tail -f /tmp/transcript-watcher.log` and `/tmp/transcript-watcher.err` (in VM)
 - Check session memory enabled: `openclaw config get agents.defaults.memorySearch.experimental.sessionMemory` (in VM)
 - Check VM can see transcripts: `ls /Volumes/My\ Shared\ Files/transcripts/` (in VM)
 - Check host transcripts: `ls ~/openclaw/transcripts/` (on host)
@@ -778,13 +796,13 @@ After implementing the async pipeline, verify everything is working:
 - [ ] Shared folders visible in VM: `ls "/Volumes/My Shared Files/"`
 - [ ] Host transcription working: check `/tmp/transcribe.log`
 - [ ] Session memory enabled: `openclaw config set agents.defaults.memorySearch.experimental.sessionMemory true`
-- [ ] Watcher 2 running in VM (transcript processor)
+- [ ] Watcher 2 running in VM: `launchctl list | grep transcript-watcher` (launchd agent loaded)
 - [ ] Send voice message to Telegram bot
 - [ ] Verify audio lands in `~/openclaw/media/recordings/` (host)
 - [ ] Verify mlx_audio transcribes to `~/openclaw/transcripts/` (host)
 - [ ] Verify transcripts synced to Google Drive
 - [ ] Verify audio moved to NAS
-- [ ] Verify transcript processed by AI (check agent output logs)
+- [ ] Verify transcript processed by AI (check `/tmp/transcript-watcher.log` in VM)
 
 **Expected timeline for long recordings:**
 - Voice message sent → appears in shared folder immediately (< 1 second)
@@ -1160,6 +1178,18 @@ ls ~/.openclaw/workspace/
 ls /Volumes/My\ Shared\ Files/media/recordings
 ls /Volumes/My\ Shared\ Files/transcripts
 ```
+
+### Memory Search After Config Changes
+
+If you change your embedding provider settings (e.g., switching from OpenAI to Ollama, or changing the model/baseUrl), you may see `database is not open` errors or empty results from `openclaw memory search`. This happens because the index needs to be rebuilt with the new embedding model.
+
+Run once after changing embedding config:
+
+```bash
+openclaw memory index
+```
+
+This rebuilds the search index using your new embedding provider. After the initial rebuild, the index stays up-to-date automatically via the gateway's file watcher and incremental syncs.
 
 ### Audio Files Not Transcribing
 
