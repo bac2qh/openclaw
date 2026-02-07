@@ -33,8 +33,51 @@ NAS_RECORDINGS="/Volumes/NAS_1/Xin/openclaw/media/recordings"
 VIBEVOICE_MODEL="mlx-community/VibeVoice-ASR-bf16"
 MAX_TOKENS=8192
 
+# Chunking configuration (for long recordings)
+CHUNK_THRESHOLD=3300 # Split if audio > 55 minutes (in seconds)
+CHUNK_DURATION=3300  # 55 minutes per chunk (in seconds)
+CHUNK_STEP=3000      # Start next chunk at 50 minutes (5 min overlap)
+
 # Ensure directories exist
 mkdir -p "$INPUT_DIR" "$OUTPUT_DIR"
+
+# Helper function: Get audio duration in seconds using ffprobe
+get_audio_duration() {
+    local file="$1"
+    ffprobe -v error -show_entries format=duration -of csv=p=0 "$file" 2>/dev/null | cut -d. -f1
+}
+
+# Helper function: Split audio into overlapping chunks
+split_audio_into_chunks() {
+    local input_file="$1"
+    local output_base="$2"  # e.g., /path/to/filename (no extension)
+    local duration="$3"
+
+    local chunk_num=1
+    local start_time=0
+    local chunks=()
+
+    echo "  Splitting into overlapping chunks (55 min each, 5 min overlap)..."
+
+    while [[ $start_time -lt $duration ]]; do
+        local chunk_file="${output_base}_part${chunk_num}.mp3"
+        echo "    Creating chunk $chunk_num (start: ${start_time}s)..."
+
+        if ffmpeg -y -i "$input_file" -ss "$start_time" -t "$CHUNK_DURATION" \
+            -c:a libmp3lame -q:a 2 "$chunk_file" -loglevel warning; then
+            chunks+=("$chunk_file")
+            echo "    ✓ Chunk $chunk_num created"
+        else
+            echo "    Error: Failed to create chunk $chunk_num" >&2
+            return 1
+        fi
+
+        ((chunk_num++))
+        ((start_time += CHUNK_STEP))
+    done
+
+    echo "${chunks[@]}"
+}
 
 # Check dependencies
 if ! "$PYTHON" -c "import mlx_audio" 2>/dev/null; then
@@ -77,31 +120,103 @@ for audio_file in "$INPUT_DIR"/*.ogg "$INPUT_DIR"/*.m4a "$INPUT_DIR"/*.wav "$INP
         fi
     fi
 
-    # Transcribe with VibeVoice-ASR (includes speaker diarization)
-    echo "  Transcribing with VibeVoice-ASR (transcription + diarization)..."
-    if "$PYTHON" -m mlx_audio.stt.generate \
-        --model "$VIBEVOICE_MODEL" \
-        --audio "$mp3_file" \
-        --output-path "${output_base}" \
-        --format json \
-        --max-tokens "$MAX_TOKENS"; then
-        echo "  ✓ Transcription saved: ${output_base}.json"
+    # Get audio duration
+    duration=$(get_audio_duration "$mp3_file")
+    if [[ -z "$duration" || "$duration" -eq 0 ]]; then
+        echo "  Error: Could not determine audio duration" >&2
+        continue
+    fi
 
-        # Move audio files to NAS after successful transcription
-        if [ -d "$NAS_RECORDINGS" ]; then
-            mv "$audio_file" "$NAS_RECORDINGS/"
-            echo "  ✓ Moved to NAS: $filename"
-            # Also move the converted MP3 if it was created
-            if [[ "$converted" == true ]]; then
-                mv "$mp3_file" "$NAS_RECORDINGS/"
-                echo "  ✓ Moved to NAS: ${basename_no_ext}.mp3"
+    duration_min=$((duration / 60))
+    echo "  Duration: ${duration_min} minutes (${duration}s)"
+
+    # Check if audio needs to be split into chunks
+    if [[ "$duration" -gt "$CHUNK_THRESHOLD" ]]; then
+        echo "  Audio is longer than 55 minutes, splitting into chunks..."
+
+        # Split audio into chunks
+        chunk_base="$INPUT_DIR/${basename_no_ext}"
+        chunks=$(split_audio_into_chunks "$mp3_file" "$chunk_base" "$duration")
+
+        if [[ -z "$chunks" ]]; then
+            echo "  Error: Failed to create chunks" >&2
+            continue
+        fi
+
+        # Transcribe each chunk
+        transcription_failed=false
+        chunk_files=()
+        for chunk_file in $chunks; do
+            chunk_basename=$(basename "$chunk_file" .mp3)
+            chunk_output="${output_base}_${chunk_basename##*_}"  # Extract partN from filename
+
+            echo "  Transcribing chunk: $(basename "$chunk_file")..."
+            if "$PYTHON" -m mlx_audio.stt.generate \
+                --model "$VIBEVOICE_MODEL" \
+                --audio "$chunk_file" \
+                --output-path "${chunk_output}" \
+                --format json \
+                --max-tokens "$MAX_TOKENS"; then
+                echo "    ✓ Chunk transcription saved: ${chunk_output}.json"
+                chunk_files+=("$chunk_file")
+            else
+                echo "    Error: Chunk transcription failed" >&2
+                transcription_failed=true
+                break
+            fi
+        done
+
+        # Clean up chunk files if all transcriptions succeeded
+        if [[ "$transcription_failed" == false ]]; then
+            echo "  ✓ All chunks transcribed successfully"
+            for chunk_file in "${chunk_files[@]}"; do
+                rm -f "$chunk_file"
+                echo "  ✓ Cleaned up: $(basename "$chunk_file")"
+            done
+
+            # Move original audio to NAS
+            if [ -d "$NAS_RECORDINGS" ]; then
+                mv "$audio_file" "$NAS_RECORDINGS/"
+                echo "  ✓ Moved to NAS: $filename"
+                # Also move the converted MP3 if it was created
+                if [[ "$converted" == true ]]; then
+                    mv "$mp3_file" "$NAS_RECORDINGS/"
+                    echo "  ✓ Moved to NAS: ${basename_no_ext}.mp3"
+                fi
+            else
+                echo "  ⚠ NAS not mounted, keeping files locally"
             fi
         else
-            echo "  ⚠ NAS not mounted, keeping files locally"
+            echo "  Error: Some chunks failed to transcribe, keeping all files" >&2
+            continue
         fi
     else
-        echo "  Error: Transcription failed" >&2
-        continue
+        # Audio is under threshold, transcribe as single file (existing behavior)
+        echo "  Transcribing with VibeVoice-ASR (transcription + diarization)..."
+        if "$PYTHON" -m mlx_audio.stt.generate \
+            --model "$VIBEVOICE_MODEL" \
+            --audio "$mp3_file" \
+            --output-path "${output_base}" \
+            --format json \
+            --max-tokens "$MAX_TOKENS"; then
+            echo "  ✓ Transcription saved: ${output_base}.json"
+
+            # Move audio files to NAS after successful transcription
+            if [ -d "$NAS_RECORDINGS" ]; then
+                mv "$audio_file" "$NAS_RECORDINGS/"
+                echo "  ✓ Moved to NAS: $filename"
+                # Also move the converted MP3 if it was created
+                if [[ "$converted" == true ]]; then
+                    mv "$mp3_file" "$NAS_RECORDINGS/"
+                    echo "  ✓ Moved to NAS: ${basename_no_ext}.mp3"
+                fi
+            else
+                echo "  ⚠ NAS not mounted, keeping files locally"
+            fi
+        else
+            echo "  Error: Transcription failed" >&2
+            continue
+        fi
     fi
 
     echo "  ✓ Done: $filename"
