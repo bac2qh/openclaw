@@ -105,9 +105,10 @@ Build a voice-powered memory system using OpenClaw, mlx-audio (VibeVoice), Lume 
 2. [Lume VM Setup](#part-2-lume-vm-setup)
 3. [OpenClaw Setup (VM)](#part-3-openclaw-setup-vm)
 4. [Telegram Bot](#part-4-telegram-bot-setup)
-5. [Daily Workflow](#part-5-daily-workflow)
-6. [Cost Breakdown](#part-6-cost-summary)
-7. [Troubleshooting](#troubleshooting)
+5. [Async Transcription Pipeline](#part-5-async-transcription-pipeline-2-watcher-setup)
+6. [Daily Workflow](#part-6-daily-workflow)
+7. [Cost Breakdown](#part-7-cost-summary)
+8. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -277,49 +278,51 @@ lume create memory-app --os ubuntu --cpu 4 --memory 8192 --disk 50G
 # lume create memory-app --os macos --cpu 4 --memory 8192 --disk 50G
 ```
 
-### 2.2 Configure Shared Folders
+### 2.2 Understanding Lume Shared Folder Limitation
 
-Edit `~/.lume/vms/memory-app/config.yaml`:
+**Important:** The Lume CLI `--shared-dir` flag only accepts **ONE** shared folder due to macOS Virtualization framework limitations.
 
-```yaml
-shared_directories:
-  # Recordings (audio files) - fast local SSD
-  - host_path: /Users/YOUR_USERNAME/openclaw/media/recordings
-    guest_path: /mnt/recordings
-    read_only: false
+**Workaround:** Use symlinks to consolidate multiple directories under a single parent folder.
 
-  # Transcripts - in Google Drive
-  - host_path: /Users/YOUR_USERNAME/Insync/bac2qh@gmail.com/Google Drive/openclaw/transcripts
-    guest_path: /mnt/transcripts
-    read_only: false
-
-  # Workspace (markdown files) - in Google Drive
-  - host_path: /Users/YOUR_USERNAME/Insync/bac2qh@gmail.com/Google Drive/openclaw/workspace
-    guest_path: /mnt/workspace
-    read_only: false
-```
-
-Replace `YOUR_USERNAME` with your actual username.
-
-### 2.3 Start VM
+**Setup:**
 
 ```bash
-lume start memory-app
+# Create parent folder for symlinks
+mkdir -p ~/openclaw-share
+
+# Create symlinks for all needed directories
+ln -s ~/openclaw/media/recordings ~/openclaw-share/recordings
+ln -s "~/Insync/bac2qh@gmail.com/Google Drive/openclaw/workspace" ~/openclaw-share/workspace
+ln -s "~/Insync/bac2qh@gmail.com/Google Drive/openclaw/transcripts" ~/openclaw-share/transcripts
+
+# Start VM with single shared directory (contains all symlinks)
+lume run nix --shared-dir ~/openclaw-share
 ```
 
-### 2.4 Verify Shared Folders
+**Or use the convenience script:**
+
+```bash
+# Copy script from repo
+cp scripts/knowledge-base/start-vm.sh ~/openclaw/scripts/
+chmod +x ~/openclaw/scripts/start-vm.sh
+
+# Start VM with auto-configured symlinks
+~/openclaw/scripts/start-vm.sh nix
+```
+
+### 2.3 Verify Shared Folders
 
 ```bash
 # SSH into VM
-lume ssh memory-app
+lume ssh nix
 
-# Check mounts
-ls /mnt/recordings
-ls /mnt/transcripts
-ls /mnt/workspace
+# Check mounts (should see all three folders)
+ls "/Volumes/My Shared Files/recordings"
+ls "/Volumes/My Shared Files/transcripts"
+ls "/Volumes/My Shared Files/workspace"
 ```
 
-All three folders should be accessible from the VM.
+All three folders should be accessible from the VM via the shared mount point.
 
 ---
 
@@ -561,9 +564,184 @@ Try voice:
 
 ---
 
-## Part 5: Daily Workflow
+## Part 5: Async Transcription Pipeline (2-Watcher Setup)
 
-### 5.1 Quick Voice Memos
+### 5.1 When to Use Async Pipeline
+
+Use the async pipeline for **long recordings** that take hours to transcribe:
+
+- Multi-hour meetings
+- Conference recordings
+- Long interviews
+- Podcasts
+
+For short voice messages (< 5 minutes), the standard sync flow works fine.
+
+### 5.2 Architecture: 2-Watcher Async Pipeline
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                      VM (OpenClaw)                          │
+│  Telegram voice → ~/.openclaw/media/ → [Watcher 1] ─────────┼──┐
+│                                                             │  │
+│  [Watcher 2] ← /Volumes/My Shared Files/transcripts/ ←──────┼──┼──┐
+│       ↓                                                     │  │  │
+│  openclaw message send → Telegram                           │  │  │
+└─────────────────────────────────────────────────────────────┘  │  │
+                                                                 │  │
+┌────────────────────────────────────────────────────────────────┼──┼─┐
+│                      HOST (macOS)                              │  │ │
+│  ~/openclaw-share/recordings/ ←────────────────────────────────┘  │ │
+│       ↓                                                           │ │
+│  mlx_audio (VibeVoice-ASR) watches, transcribes                   │ │
+│       ↓                                                           │ │
+│  ~/openclaw-share/transcripts/ (.txt JSON output) ────────────────┘ │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+**Flow:**
+
+1. **Watcher 1 (VM):** Copies audio files from OpenClaw media directory to shared recordings folder
+2. **mlx_audio (Host):** Watches recordings folder, transcribes with VibeVoice-ASR, saves to transcripts folder
+3. **Watcher 2 (VM):** Picks up transcripts, sends via `openclaw message send` to Telegram
+
+### 5.3 Setup: Disable Built-in Transcription
+
+Since we're using mlx_audio on the host for transcription, disable the built-in cloud transcription:
+
+```bash
+# Inside VM
+openclaw config set tools.media.audio.enabled false
+```
+
+This ensures audio files are downloaded but not transcribed by OpenClaw (we handle transcription on the host).
+
+### 5.4 Setup: Get Your Telegram Chat ID
+
+To send transcripts back to Telegram, you need your chat ID:
+
+```bash
+# Option 1: Send a message to @userinfobot on Telegram
+# It will reply with your user ID (chat ID)
+
+# Option 2: Get it from OpenClaw gateway logs
+# Send a message to your bot, then check:
+tail -f /tmp/openclaw-gateway.log | grep "chat"
+```
+
+### 5.5 Setup: Install fswatch
+
+Both watcher scripts use `fswatch` to monitor directories:
+
+```bash
+# On host Mac
+brew install fswatch
+
+# Inside VM (if running watchers there)
+sudo apt install fswatch  # Ubuntu/Debian
+```
+
+### 5.6 Running the Watchers
+
+**Terminal 1: Start Watcher 1 (Audio Copier) - Inside VM**
+
+```bash
+# SSH into VM
+lume ssh nix
+
+# Copy the watcher script (if not already done)
+# (Run this on host first: scp scripts/knowledge-base/audio-watcher.sh nix:~/)
+
+# Run the audio watcher
+chmod +x ~/audio-watcher.sh
+~/audio-watcher.sh
+```
+
+**Terminal 2: Start Watcher 2 (Transcript Sender) - Inside VM**
+
+```bash
+# SSH into VM
+lume ssh nix
+
+# Set your Telegram chat ID
+export TELEGRAM_CHAT_ID="YOUR_CHAT_ID_HERE"
+
+# Copy the watcher script (if not already done)
+# (Run this on host first: scp scripts/knowledge-base/transcript-watcher.sh nix:~/)
+
+# Run the transcript watcher
+chmod +x ~/transcript-watcher.sh
+~/transcript-watcher.sh
+```
+
+**Pro Tip: Use tmux for persistent sessions**
+
+```bash
+# Inside VM
+tmux new -s watchers
+
+# Window 1: Audio watcher
+~/audio-watcher.sh
+
+# Create new window (Ctrl+B, C)
+# Window 2: Transcript watcher
+export TELEGRAM_CHAT_ID="YOUR_CHAT_ID_HERE"
+~/transcript-watcher.sh
+
+# Detach: Ctrl+B, D
+# Reattach: tmux attach -t watchers
+```
+
+### 5.7 Testing the Pipeline
+
+1. **Send a voice message** to your Telegram bot (or upload audio file)
+2. **Check Watcher 1:** Should see "New audio: filename.ogg" and copy confirmation
+3. **Check host transcription:** `tail -f /tmp/transcribe.log` (if using launchd)
+4. **Check Watcher 2:** Should see "New transcript: filename.txt" and send confirmation
+5. **Check Telegram:** Should receive the transcribed text as a message from your bot
+
+### 5.8 Troubleshooting Async Pipeline
+
+**Audio not being copied:**
+- Check Watcher 1 is running: `ps aux | grep audio-watcher`
+- Check OpenClaw media path: `ls ~/.openclaw/media/`
+- Check shared folder mount: `ls /Volumes/My\ Shared\ Files/recordings/`
+
+**Transcription not happening:**
+- Check host launchd: `launchctl list | grep transcribe`
+- Check mlx-audio: `python -c "import mlx_audio"`
+- Check transcription logs: `tail -f /tmp/transcribe.log`
+
+**Transcripts not being sent:**
+- Check Watcher 2 is running: `ps aux | grep transcript-watcher`
+- Check Telegram chat ID is set: `echo $TELEGRAM_CHAT_ID`
+- Check transcript format: `cat /Volumes/My\ Shared\ Files/transcripts/*.txt`
+- Test manual send: `openclaw message send --channel telegram --target "$TELEGRAM_CHAT_ID" --message "test"`
+
+### 5.9 Verification Checklist
+
+After implementing the async pipeline, verify everything is working:
+
+- [ ] VM starts with shared folder: `~/openclaw/scripts/start-vm.sh nix`
+- [ ] Shared folders visible in VM: `ls "/Volumes/My Shared Files/"`
+- [ ] Watcher 1 running in VM (audio copier)
+- [ ] Watcher 2 running in VM (transcript sender)
+- [ ] Host transcription working: check `/tmp/transcribe.log`
+- [ ] Send voice message to Telegram bot
+- [ ] Verify audio copied to shared recordings folder
+- [ ] Verify mlx_audio transcribes (check transcripts folder on host)
+- [ ] Verify transcript sent back to Telegram
+
+**Expected timeline for long recordings:**
+- Voice message sent → Watcher 1 copies immediately (< 1 second)
+- Host transcription → varies by length (e.g., 2-hour meeting ≈ 30-60 minutes)
+- Watcher 2 sends → immediately after transcript appears (< 1 second)
+
+---
+
+## Part 6: Daily Workflow
+
+### 6.1 Quick Voice Memos
 
 **Via Telegram voice message:**
 1. Open bot → hold mic → speak → release
@@ -576,7 +754,7 @@ Examples:
 "Todo: review security proposal tomorrow"
 ```
 
-### 5.2 Short Meetings (< 1 hour)
+### 6.2 Short Meetings (< 1 hour)
 
 **Option A: Record in Telegram**
 - Long-press mic for voice message
@@ -590,9 +768,17 @@ Examples:
 3. Add caption: "Meeting with design team"
 4. Bot transcribes
 
-### 5.3 Long Meetings (> 1 hour)
+### 6.3 Long Meetings (> 1 hour)
 
-**Use host transcription:**
+**Option A: Use async 2-watcher pipeline (recommended for multi-hour recordings)**
+
+1. Send audio file to Telegram bot (or record directly in OpenClaw media folder)
+2. Watcher 1 copies to shared folder
+3. mlx_audio transcribes on host (may take hours)
+4. Watcher 2 sends transcript back to Telegram when done
+5. Bot automatically indexes and makes searchable
+
+**Option B: Use host transcription directly (for recordings not from Telegram)**
 
 ```bash
 # On host Mac:
@@ -615,7 +801,7 @@ Then tell bot:
 - Transcripts: saved to Google Drive (synced to cloud, accessible from any device)
 - NAS path: `/Volumes/NAS_1/Xin/openclaw/media/recordings/`
 
-### 5.4 Query Your Memory
+### 6.4 Query Your Memory
 
 Send to bot (text or voice):
 ```
@@ -626,7 +812,7 @@ Send to bot (text or voice):
 "What was decided about the API?"
 ```
 
-### 5.5 Store Important Info
+### 6.5 Store Important Info
 
 ```
 "Remember: AWS account ID is 123456789"
@@ -634,7 +820,7 @@ Send to bot (text or voice):
 "Important: Sarah is on vacation Feb 1-15"
 ```
 
-### 5.6 Daily Review
+### 6.6 Daily Review
 
 End of day:
 ```
@@ -643,7 +829,7 @@ End of day:
 
 ---
 
-## Part 6: Reminders
+## Part 7: Reminders
 
 OpenClaw has built-in cron for reminders.
 
@@ -673,7 +859,7 @@ openclaw cron remove <job-id>
 
 ---
 
-## Part 7: Backup and Sync Strategy
+## Part 8: Backup and Sync Strategy
 
 ### What Gets Backed Up
 
@@ -744,7 +930,7 @@ Since markdown lives in Google Drive:
 
 ---
 
-## Part 8: Cost Summary
+## Part 9: Cost Summary
 
 ### Unified Local Transcription Flow
 
@@ -780,7 +966,7 @@ Since markdown lives in Google Drive:
 
 ---
 
-## Part 8: Getting Claude API Access
+## Part 10: Getting Claude API Access
 
 ### Why API (not subscription)?
 
