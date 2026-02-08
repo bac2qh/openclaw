@@ -7,7 +7,7 @@
 TRANSCRIPTS_DIR="/Volumes/My Shared Files/transcripts"
 PROCESSED_DIR="/Volumes/My Shared Files/transcripts/processed"
 TELEGRAM_CHAT_ID="${TELEGRAM_CHAT_ID:-YOUR_CHAT_ID}"
-AGENT_ID="${AGENT_ID:-main}"
+AGENT_ID="${AGENT_ID:-transcript-processor}"
 
 mkdir -p "$PROCESSED_DIR"
 

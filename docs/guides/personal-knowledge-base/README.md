@@ -673,6 +673,37 @@ To send transcripts back to Telegram, you need your chat ID:
 tail -f /tmp/openclaw-gateway.log | grep "chat"
 ```
 
+### 5.4a Create a Dedicated Transcript Processor Agent
+
+**Critical: Avoid Session Lock Contention**
+
+The transcript watcher uses `openclaw agent --message` to process transcripts, which can take up to 5 minutes for long recordings. If the watcher shares the same agent session as your regular Telegram conversations, you'll experience:
+
+- **Session lock contention** - regular text messages fail silently while transcript processing holds the lock
+- **Context pollution** - transcript processing turns interleave with regular conversation
+- **Malformed tool calls** - confused context causes errors like "read tool called without path"
+
+> **Important:** Using the same agent for both interactive Telegram messages and background transcript processing causes session lock contention. The transcript processor holds the session lock for up to 5 minutes, during which regular messages may fail silently (AI says "Noted" but nothing persists).
+
+**Solution: Create a dedicated agent that shares the workspace**
+
+```bash
+# Inside VM - create agent that shares the main workspace
+openclaw agents add --name transcript-processor --workspace ~/.openclaw/workspace
+```
+
+This gives the transcript processor:
+- ✅ **Its own session** (no lock contention with the main agent)
+- ✅ **Shared workspace directory** (memory files accessible to both agents)
+- ✅ **Independent processing** (can handle long transcripts without blocking interactive messages)
+
+The `transcript-watcher.sh` script defaults to using `transcript-processor` as the agent ID. If you need to override it, set the `AGENT_ID` environment variable:
+
+```bash
+# Override default agent (not recommended unless you know what you're doing)
+AGENT_ID=custom-agent TELEGRAM_CHAT_ID=YOUR_CHAT_ID /Volumes/My\ Shared\ Files/scripts/transcript-watcher.sh
+```
+
 ### 5.5 Running the Watchers
 
 **Note:** With the unified folder approach, Watcher 1 (audio copier) is optional - audio already lands in the shared folder. You only need Watcher 2 to send transcripts back to Telegram.
@@ -1217,6 +1248,41 @@ openclaw config get channels.telegram
 openclaw channels status --probe
 ```
 
+### Memory Not Saving When AI Says "Noted"
+
+If the AI responds "Noted" or confirms it saved information, but nothing appears in memory files or search results:
+
+**Check for session lock contention:**
+
+```bash
+# Inside VM - check if transcript-watcher is running
+tmux ls
+
+# Verify it's using a separate agent (not "main")
+# Check the watcher script
+grep AGENT_ID /Volumes/My\ Shared\ Files/scripts/transcript-watcher.sh
+
+# Should show: AGENT_ID="${AGENT_ID:-transcript-processor}"
+```
+
+**If using the same agent for both interactive and background processing:**
+
+1. Create a dedicated transcript processor agent (see [5.4a Create a Dedicated Transcript Processor Agent](#54a-create-a-dedicated-transcript-processor-agent))
+2. Restart the transcript-watcher with the new agent
+3. Verify memory saves now work during transcript processing
+
+**Test memory persistence:**
+
+```bash
+# Send a text message: "remember my favorite color is blue"
+# Verify it saved:
+cat ~/.openclaw/workspace/memory/*.md
+# OR
+openclaw memory search "favorite color"
+
+# If it saved, the issue is resolved
+```
+
 ### Voice Transcription Failing
 
 **Check mlx-audio:**
@@ -1283,21 +1349,24 @@ Communication style:
 
 ### 3. Advanced: Multi-Agent Setup
 
-Run specialized agents for different contexts:
+Run specialized agents for different contexts. Each agent has its own session but can share workspace directories for memory access.
 
-```yaml
-# ~/.openclaw/config.yaml
-agents:
-  work:
-    personality: "Professional assistant for work context"
-    memorySearch:
-      paths: ["/Volumes/My Shared Files/transcripts/work"]
+**Create additional agents:**
 
-  personal:
-    personality: "Casual assistant for personal notes"
-    memorySearch:
-      paths: ["/Volumes/My Shared Files/transcripts/personal"]
+```bash
+# Create work-focused agent with shared workspace
+openclaw agents add --name work --workspace ~/.openclaw/workspace
+
+# Create personal agent with shared workspace
+openclaw agents add --name personal --workspace ~/.openclaw/workspace
+
+# List all agents
+openclaw agents list
 ```
+
+**Switch between agents in Telegram:**
+
+The agent routing is controlled by the gateway configuration. By default, all messages go to the `main` agent. To use different agents for different contexts, you would need to implement custom routing logic or use separate bot tokens for each agent.
 
 ### 4. Backup Strategy
 
