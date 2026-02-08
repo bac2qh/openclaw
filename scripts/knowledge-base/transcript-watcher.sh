@@ -50,7 +50,7 @@ while true; do
 Transcript JSON:
 $CONTENT" \
       --thinking medium \
-      --timeout 300
+      --timeout 3000
 
     if [[ $? -eq 0 ]]; then
       mv "$file" "$PROCESSED_DIR/"
