@@ -7,6 +7,7 @@
 TRANSCRIPTS_DIR="/Volumes/My Shared Files/transcripts"
 PROCESSED_DIR="/Volumes/My Shared Files/transcripts/processed"
 TELEGRAM_CHAT_ID="${TELEGRAM_CHAT_ID:-YOUR_CHAT_ID}"
+AGENT_ID="${AGENT_ID:-main}"
 
 mkdir -p "$PROCESSED_DIR"
 
@@ -38,6 +39,7 @@ while true; do
     CONTENT=$(cat "$file")
 
     openclaw agent \
+      --agent "$AGENT_ID" \
       --message "Process this voice transcript JSON. Determine from the content and metadata whether this is a quick voice memo, a note, or a multi-person meeting, then process accordingly:
 - **Voice memo/note**: Store the key facts in memory. Keep it brief.
 - **Meeting**: Summarize key discussion points (3-5 bullets), extract action items with owners, identify decisions made, and update memory.
