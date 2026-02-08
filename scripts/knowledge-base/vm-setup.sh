@@ -96,44 +96,6 @@ EOF
     echo "Created initial MEMORY.md"
 fi
 
-# Install transcript-watcher LaunchAgent (macOS only)
-if [ "$OS" = "macos" ]; then
-    echo ""
-    echo "=== Installing Transcript Watcher LaunchAgent ==="
-
-    PLIST_SOURCE="$HOME/openclaw/scripts/knowledge-base/com.user.transcript-watcher.plist"
-    PLIST_DEST="$HOME/Library/LaunchAgents/com.user.transcript-watcher.plist"
-
-    if [ -f "$PLIST_SOURCE" ]; then
-        mkdir -p "$HOME/Library/LaunchAgents"
-        cp "$PLIST_SOURCE" "$PLIST_DEST"
-        echo "Copied plist to $PLIST_DEST"
-        echo ""
-        echo "IMPORTANT: Edit the plist to set your credentials:"
-        echo "  1. Replace YOUR_USERNAME with your actual username"
-        echo "  2. Replace YOUR_CHAT_ID_HERE with your Telegram chat ID"
-        echo "     (Get it from @userinfobot on Telegram)"
-        echo ""
-        read -p "Press Enter after editing the plist, or Ctrl+C to skip..."
-
-        # Offer to load the agent
-        read -p "Load the transcript watcher now? (y/N) " -n 1 -r
-        echo
-        if [[ $REPLY =~ ^[Yy]$ ]]; then
-            launchctl load "$PLIST_DEST"
-            echo "LaunchAgent loaded. Check status with:"
-            echo "  launchctl list | grep transcript-watcher"
-            echo "  tail -f /tmp/transcript-watcher.log"
-        else
-            echo "To load later, run:"
-            echo "  launchctl load $PLIST_DEST"
-        fi
-    else
-        echo "Warning: Could not find plist at $PLIST_SOURCE"
-        echo "You can manually install it later from the openclaw repo."
-    fi
-fi
-
 echo ""
 echo "=== Setup Complete ==="
 echo ""

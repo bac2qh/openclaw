@@ -21,31 +21,35 @@ if [[ "$TELEGRAM_CHAT_ID" == "YOUR_CHAT_ID" ]]; then
   exit 1
 fi
 
-fswatch -0 "$TRANSCRIPTS_DIR" | while read -d "" file; do
-  # Only process .json files
-  [[ "$file" =~ \.json$ ]] || continue
-  [[ -f "$file" ]] || continue
+echo "Polling every 10 seconds for new transcripts..."
+echo "(VirtioFS shared folders don't support filesystem events)"
+echo ""
 
-  # Skip files in processed directory
-  [[ "$file" =~ /processed/ ]] && continue
+while true; do
+  for file in "$TRANSCRIPTS_DIR"/*.json; do
+    [[ -f "$file" ]] || continue
+    # Skip files in processed directory
+    [[ "$file" =~ /processed/ ]] && continue
+    basename=$(basename "$file")
+    [[ -f "$PROCESSED_DIR/$basename" ]] && continue
 
-  echo "[$(date '+%Y-%m-%d %H:%M:%S')] New transcript: $(basename "$file")"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] New transcript: $basename"
 
-  # Extract text from JSON array format
-  TEXT=$(jq -r '.[].Content' "$file" 2>/dev/null | tr '\n' ' ')
+    # Extract text from JSON array format
+    TEXT=$(jq -r '.[].Content' "$file" 2>/dev/null | tr '\n' ' ')
 
-  if [[ -n "$TEXT" ]]; then
-    # Extract metadata from transcript JSON
-    SEGMENT_COUNT=$(jq 'length' "$file" 2>/dev/null || echo 0)
-    WORD_COUNT=$(echo "$TEXT" | wc -w | xargs)
-    SPEAKER_COUNT=$(jq '[.[].speaker_id // .[].Speaker // "unknown"] | unique | length' "$file" 2>/dev/null || echo 1)
-    DURATION=$(jq '((last.end_time // last.End // 0) - (first.start_time // first.Start // 0))' "$file" 2>/dev/null || echo 0)
-    DURATION_MIN=$(echo "scale=1; $DURATION / 60" | bc 2>/dev/null || echo "0")
+    if [[ -n "$TEXT" ]]; then
+      # Extract metadata from transcript JSON
+      SEGMENT_COUNT=$(jq 'length' "$file" 2>/dev/null || echo 0)
+      WORD_COUNT=$(echo "$TEXT" | wc -w | xargs)
+      SPEAKER_COUNT=$(jq '[.[].speaker_id // .[].Speaker // "unknown"] | unique | length' "$file" 2>/dev/null || echo 1)
+      DURATION=$(jq '((last.end_time // last.End // 0) - (first.start_time // first.Start // 0))' "$file" 2>/dev/null || echo 0)
+      DURATION_MIN=$(echo "scale=1; $DURATION / 60" | bc 2>/dev/null || echo "0")
 
-    # Trigger AI to process transcript with adaptive prompt
-    # With experimental.sessionMemory enabled, this conversation is auto-indexed
-    openclaw agent \
-      --message "Process this voice transcript. Here is context about the recording:
+      # Trigger AI to process transcript with adaptive prompt
+      # With experimental.sessionMemory enabled, this conversation is auto-indexed
+      openclaw agent \
+        --message "Process this voice transcript. Here is context about the recording:
 - Duration: ~${DURATION_MIN} minutes
 - Speakers: ${SPEAKER_COUNT}
 - Words: ${WORD_COUNT}
@@ -57,17 +61,19 @@ Based on the content and metadata, determine if this is a quick voice memo, a no
 
 Transcript:
 $TEXT" \
-      --thinking medium \
-      --timeout 300
+        --thinking medium \
+        --timeout 300
 
-    if [[ $? -eq 0 ]]; then
-      # Move to processed directory only if processing succeeded
-      mv "$file" "$PROCESSED_DIR/"
-      echo "  → Processed and archived: $(basename "$file")"
+      if [[ $? -eq 0 ]]; then
+        # Move to processed directory only if processing succeeded
+        mv "$file" "$PROCESSED_DIR/"
+        echo "  → Processed and archived: $basename"
+      else
+        echo "  → Error: Failed to process transcript"
+      fi
     else
-      echo "  → Error: Failed to process transcript"
+      echo "  → Warning: Could not parse transcript"
     fi
-  else
-    echo "  → Warning: Could not parse transcript"
-  fi
+  done
+  sleep 10
 done

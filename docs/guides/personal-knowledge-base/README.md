@@ -673,19 +673,7 @@ To send transcripts back to Telegram, you need your chat ID:
 tail -f /tmp/openclaw-gateway.log | grep "chat"
 ```
 
-### 5.5 Setup: Install fswatch
-
-Both watcher scripts use `fswatch` to monitor directories:
-
-```bash
-# On host Mac
-brew install fswatch
-
-# Inside VM (if running watchers there)
-sudo apt install fswatch  # Ubuntu/Debian
-```
-
-### 5.6 Running the Watchers
+### 5.5 Running the Watchers
 
 **Note:** With the unified folder approach, Watcher 1 (audio copier) is optional - audio already lands in the shared folder. You only need Watcher 2 to send transcripts back to Telegram.
 
@@ -718,45 +706,31 @@ openclaw config set agents.defaults.memorySearch.experimental.sessionMemory true
 # (Run this on host first: scp scripts/knowledge-base/transcript-watcher.sh nix:~/)
 ```
 
-**Running as a LaunchAgent (recommended)**
+**Running with tmux (recommended for headless VMs)**
 
-The transcript watcher can run as a persistent background service via launchd:
-
-```bash
-# 1. Copy the plist template (inside VM)
-cp scripts/knowledge-base/com.user.transcript-watcher.plist ~/Library/LaunchAgents/
-
-# 2. Edit the plist to set your username and Telegram chat ID
-# Get chat ID from @userinfobot on Telegram
-nano ~/Library/LaunchAgents/com.user.transcript-watcher.plist
-
-# 3. Load the agent
-launchctl load ~/Library/LaunchAgents/com.user.transcript-watcher.plist
-
-# 4. Verify it's running
-launchctl list | grep transcript-watcher
-
-# 5. Check logs
-tail -f /tmp/transcript-watcher.log
-```
-
-**To uninstall:**
+LaunchAgents don't work in headless macOS VMs accessed via SSH (they require a GUI/Aqua session). Use tmux instead:
 
 ```bash
-launchctl unload ~/Library/LaunchAgents/com.user.transcript-watcher.plist
-rm ~/Library/LaunchAgents/com.user.transcript-watcher.plist
+# SSH into VM
+lume ssh nix
+
+# Start tmux session (persists across SSH disconnects)
+tmux new-session -d -s transcript-watcher \
+  "TELEGRAM_CHAT_ID=YOUR_CHAT_ID_HERE /Volumes/My\ Shared\ Files/scripts/transcript-watcher.sh"
+
+# Attach to check logs
+tmux attach -t transcript-watcher
+
+# Detach: Ctrl+B, D
 ```
 
-**Alternative: Run manually (for testing)**
+**To stop the watcher:**
 
 ```bash
-# Inside VM
-export TELEGRAM_CHAT_ID="YOUR_CHAT_ID_HERE"
-chmod +x ~/transcript-watcher.sh
-~/transcript-watcher.sh
+tmux kill-session -t transcript-watcher
 ```
 
-### 5.7 Testing the Pipeline
+### 5.6 Testing the Pipeline
 
 1. **Send a voice message** to your Telegram bot (or upload audio file)
 2. **Check audio lands in shared folder:** `ls ~/openclaw/media/recordings/` (on host)
@@ -765,7 +739,7 @@ chmod +x ~/transcript-watcher.sh
 5. **Check Watcher 2:** Should see "New transcript: filename.txt" and send confirmation (in VM)
 6. **Check Telegram:** Should receive the transcribed text as a message from your bot
 
-### 5.8 Troubleshooting Async Pipeline
+### 5.7 Troubleshooting Async Pipeline
 
 **Audio not appearing in shared folder:**
 - Check symlink exists: `ls -la ~/.openclaw/media/inbound` (should point to shared folder)
@@ -781,14 +755,14 @@ chmod +x ~/transcript-watcher.sh
 - Check recordings folder: `ls ~/openclaw/media/recordings/`
 
 **Transcripts not being processed:**
-- Check Watcher 2 is running: `launchctl list | grep transcript-watcher` (in VM)
-- Check logs: `tail -f /tmp/transcript-watcher.log` and `/tmp/transcript-watcher.err` (in VM)
+- Check Watcher 2 is running: `tmux ls` and look for `transcript-watcher` session (in VM)
+- Check logs: `tmux attach -t transcript-watcher` to view live output (in VM)
 - Check session memory enabled: `openclaw config get agents.defaults.memorySearch.experimental.sessionMemory` (in VM)
 - Check VM can see transcripts: `ls /Volumes/My\ Shared\ Files/transcripts/` (in VM)
 - Check host transcripts: `ls ~/openclaw/transcripts/` (on host)
 - Test manual processing: `openclaw agent --message "Summarize: Test transcript" --thinking medium` (in VM)
 
-### 5.9 Verification Checklist
+### 5.8 Verification Checklist
 
 After implementing the async pipeline, verify everything is working:
 
@@ -796,13 +770,13 @@ After implementing the async pipeline, verify everything is working:
 - [ ] Shared folders visible in VM: `ls "/Volumes/My Shared Files/"`
 - [ ] Host transcription working: check `/tmp/transcribe.log`
 - [ ] Session memory enabled: `openclaw config set agents.defaults.memorySearch.experimental.sessionMemory true`
-- [ ] Watcher 2 running in VM: `launchctl list | grep transcript-watcher` (launchd agent loaded)
+- [ ] Watcher 2 running in VM: `tmux ls` shows `transcript-watcher` session
 - [ ] Send voice message to Telegram bot
 - [ ] Verify audio lands in `~/openclaw/media/recordings/` (host)
 - [ ] Verify mlx_audio transcribes to `~/openclaw/transcripts/` (host)
 - [ ] Verify transcripts synced to Google Drive
 - [ ] Verify audio moved to NAS
-- [ ] Verify transcript processed by AI (check `/tmp/transcript-watcher.log` in VM)
+- [ ] Verify transcript processed by AI (check tmux session output in VM)
 
 **Expected timeline for long recordings:**
 - Voice message sent → appears in shared folder immediately (< 1 second)
