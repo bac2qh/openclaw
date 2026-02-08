@@ -35,44 +35,23 @@ while true; do
 
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] New transcript: $basename"
 
-    # Extract text from JSON array format
-    TEXT=$(jq -r '.[].Content' "$file" 2>/dev/null | tr '\n' ' ')
+    CONTENT=$(cat "$file")
 
-    if [[ -n "$TEXT" ]]; then
-      # Extract metadata from transcript JSON
-      SEGMENT_COUNT=$(jq 'length' "$file" 2>/dev/null || echo 0)
-      WORD_COUNT=$(echo "$TEXT" | wc -w | xargs)
-      SPEAKER_COUNT=$(jq '[.[].speaker_id // .[].Speaker // "unknown"] | unique | length' "$file" 2>/dev/null || echo 1)
-      DURATION=$(jq '((last.end_time // last.End // 0) - (first.start_time // first.Start // 0))' "$file" 2>/dev/null || echo 0)
-      DURATION_MIN=$(echo "scale=1; $DURATION / 60" | bc 2>/dev/null || echo "0")
-
-      # Trigger AI to process transcript with adaptive prompt
-      # With experimental.sessionMemory enabled, this conversation is auto-indexed
-      openclaw agent \
-        --message "Process this voice transcript. Here is context about the recording:
-- Duration: ~${DURATION_MIN} minutes
-- Speakers: ${SPEAKER_COUNT}
-- Words: ${WORD_COUNT}
-- Segments: ${SEGMENT_COUNT}
-
-Based on the content and metadata, determine if this is a quick voice memo, a note, or a multi-person meeting, then process accordingly:
+    openclaw agent \
+      --message "Process this voice transcript JSON. Determine from the content and metadata whether this is a quick voice memo, a note, or a multi-person meeting, then process accordingly:
 - **Voice memo/note**: Store the key facts in memory. Keep it brief.
 - **Meeting**: Summarize key discussion points (3-5 bullets), extract action items with owners, identify decisions made, and update memory.
 
-Transcript:
-$TEXT" \
-        --thinking medium \
-        --timeout 300
+Transcript JSON:
+$CONTENT" \
+      --thinking medium \
+      --timeout 300
 
-      if [[ $? -eq 0 ]]; then
-        # Move to processed directory only if processing succeeded
-        mv "$file" "$PROCESSED_DIR/"
-        echo "  → Processed and archived: $basename"
-      else
-        echo "  → Error: Failed to process transcript"
-      fi
+    if [[ $? -eq 0 ]]; then
+      mv "$file" "$PROCESSED_DIR/"
+      echo "  → Processed and archived: $basename"
     else
-      echo "  → Warning: Could not parse transcript"
+      echo "  → Error: Failed to process transcript"
     fi
   done
   sleep 10
