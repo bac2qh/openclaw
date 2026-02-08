@@ -40,6 +40,9 @@ while true; do
 
     openclaw agent \
       --agent "$AGENT_ID" \
+      --to "$TELEGRAM_CHAT_ID" \
+      --channel telegram \
+      --deliver \
       --message "Process this voice transcript JSON. Determine from the content and metadata whether this is a quick voice memo, a note, or a multi-person meeting, then process accordingly:
 - **Voice memo/note**: Store the key facts in memory. Keep it brief.
 - **Meeting**: Summarize key discussion points (3-5 bullets), extract action items with owners, identify decisions made, and update memory.
