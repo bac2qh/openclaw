@@ -689,7 +689,7 @@ The transcript watcher uses `openclaw agent --message` to process transcripts, w
 
 ```bash
 # Inside VM - create agent that shares the main workspace
-openclaw agents add --name transcript-processor --workspace ~/.openclaw/workspace
+openclaw agents add transcript-processor --workspace ~/.openclaw/workspace
 ```
 
 This gives the transcript processor:
@@ -1355,10 +1355,10 @@ Run specialized agents for different contexts. Each agent has its own session bu
 
 ```bash
 # Create work-focused agent with shared workspace
-openclaw agents add --name work --workspace ~/.openclaw/workspace
+openclaw agents add work --workspace ~/.openclaw/workspace
 
 # Create personal agent with shared workspace
-openclaw agents add --name personal --workspace ~/.openclaw/workspace
+openclaw agents add personal --workspace ~/.openclaw/workspace
 
 # List all agents
 openclaw agents list
