@@ -30,8 +30,9 @@ OUTPUT_DIR="${HOME}/openclaw/transcripts"
 GDRIVE_TRANSCRIPTS="${HOME}/Insync/bac2qh@gmail.com/Google Drive/openclaw/transcripts"
 GDRIVE_WORKSPACE="${HOME}/Insync/bac2qh@gmail.com/Google Drive/openclaw/workspace"
 NAS_RECORDINGS="/Volumes/NAS_1/Xin/openclaw/media/recordings"
-VIBEVOICE_MODEL="mlx-community/whisper-large-v3-turbo-asr-fp16"
-# VIBEVOICE_MODEL="mlx-community/VibeVoice-ASR-bf16"
+FAST_MODEL="mlx-community/whisper-large-v3-turbo-asr-fp16"
+FULL_MODEL="mlx-community/VibeVoice-ASR-bf16"
+MODEL_THRESHOLD=600  # Use FULL_MODEL if audio > 10 minutes (in seconds)
 MAX_TOKENS=65536
 
 # Chunking configuration (for long recordings)
@@ -131,6 +132,15 @@ for audio_file in "$INPUT_DIR"/*.ogg "$INPUT_DIR"/*.m4a "$INPUT_DIR"/*.wav "$INP
     duration_min=$((duration / 60))
     echo "  Duration: ${duration_min} minutes (${duration}s)"
 
+    # Select model based on duration
+    if [[ "$duration" -gt "$MODEL_THRESHOLD" ]]; then
+        selected_model="$FULL_MODEL"
+        echo "  Model: VibeVoice-ASR (long recording)"
+    else
+        selected_model="$FAST_MODEL"
+        echo "  Model: whisper-turbo (short recording)"
+    fi
+
     # Check if audio needs to be split into chunks
     if [[ "$duration" -gt "$CHUNK_THRESHOLD" ]]; then
         echo "  Audio is longer than 55 minutes, splitting into chunks..."
@@ -153,7 +163,7 @@ for audio_file in "$INPUT_DIR"/*.ogg "$INPUT_DIR"/*.m4a "$INPUT_DIR"/*.wav "$INP
 
             echo "  Transcribing chunk: $(basename "$chunk_file")..."
             if "$PYTHON" -m mlx_audio.stt.generate \
-                --model "$VIBEVOICE_MODEL" \
+                --model "$selected_model" \
                 --audio "$chunk_file" \
                 --output-path "${chunk_output}" \
                 --format json \
@@ -195,7 +205,7 @@ for audio_file in "$INPUT_DIR"/*.ogg "$INPUT_DIR"/*.m4a "$INPUT_DIR"/*.wav "$INP
         # Audio is under threshold, transcribe as single file (existing behavior)
         echo "  Transcribing with VibeVoice-ASR (transcription + diarization)..."
         if "$PYTHON" -m mlx_audio.stt.generate \
-            --model "$VIBEVOICE_MODEL" \
+            --model "$selected_model" \
             --audio "$mp3_file" \
             --output-path "${output_base}" \
             --format json \
