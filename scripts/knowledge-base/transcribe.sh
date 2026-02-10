@@ -43,6 +43,15 @@ CHUNK_STEP=3000      # Start next chunk at 50 minutes (5 min overlap)
 # Ensure directories exist
 mkdir -p "$INPUT_DIR" "$OUTPUT_DIR"
 
+# Logging helpers
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"
+}
+
+log_err() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: $*" >&2
+}
+
 # Helper function: Get audio duration in seconds using ffprobe
 get_audio_duration() {
     local file="$1"
@@ -59,18 +68,18 @@ split_audio_into_chunks() {
     local start_time=0
     local chunks=()
 
-    echo "  Splitting into overlapping chunks (55 min each, 5 min overlap)..."
+    log "  Splitting into overlapping chunks (55 min each, 5 min overlap)..."
 
     while [[ $start_time -lt $duration ]]; do
         local chunk_file="${output_base}_part${chunk_num}.mp3"
-        echo "    Creating chunk $chunk_num (start: ${start_time}s)..."
+        log "    Creating chunk $chunk_num (start: ${start_time}s)..."
 
         if ffmpeg -y -i "$input_file" -ss "$start_time" -t "$CHUNK_DURATION" \
             -c:a libmp3lame -q:a 2 "$chunk_file" -loglevel warning; then
             chunks+=("$chunk_file")
-            echo "    ✓ Chunk $chunk_num created"
+            log "    ✓ Chunk $chunk_num created"
         else
-            echo "    Error: Failed to create chunk $chunk_num" >&2
+            log_err "    Failed to create chunk $chunk_num"
             return 1
         fi
 
@@ -83,12 +92,12 @@ split_audio_into_chunks() {
 
 # Check dependencies
 if ! "$PYTHON" -c "import mlx_audio" 2>/dev/null; then
-    echo "Error: mlx-audio not found. Install with: pip install mlx-audio" >&2
+    log_err "mlx-audio not found. Install with: pip install mlx-audio"
     exit 1
 fi
 
 if ! command -v ffmpeg &> /dev/null; then
-    echo "Error: ffmpeg not found. Install with: brew install ffmpeg" >&2
+    log_err "ffmpeg not found. Install with: brew install ffmpeg"
     exit 1
 fi
 
@@ -104,7 +113,7 @@ for audio_file in "$INPUT_DIR"/*.ogg "$INPUT_DIR"/*.m4a "$INPUT_DIR"/*.wav "$INP
     timestamp=$(date +%Y-%m-%d-%H%M)
     output_base="$OUTPUT_DIR/${timestamp}-${basename_no_ext}"
 
-    echo "Processing: $filename"
+    log "Processing: $filename"
 
     # Convert to MP3 if not already (miniaudio only reliably supports mp3/wav/flac)
     if [[ "$extension" == "mp3" ]]; then
@@ -112,12 +121,12 @@ for audio_file in "$INPUT_DIR"/*.ogg "$INPUT_DIR"/*.m4a "$INPUT_DIR"/*.wav "$INP
         converted=false
     else
         mp3_file="$INPUT_DIR/${basename_no_ext}.mp3"
-        echo "  Converting to MP3..."
+        log "  Converting to MP3..."
         if ffmpeg -y -i "$audio_file" -q:a 2 "$mp3_file" -loglevel warning; then
-            echo "  ✓ Converted: ${basename_no_ext}.mp3"
+            log "  ✓ Converted: ${basename_no_ext}.mp3"
             converted=true
         else
-            echo "  Error: Conversion failed" >&2
+            log_err "  Conversion failed"
             continue
         fi
     fi
@@ -125,32 +134,32 @@ for audio_file in "$INPUT_DIR"/*.ogg "$INPUT_DIR"/*.m4a "$INPUT_DIR"/*.wav "$INP
     # Get audio duration
     duration=$(get_audio_duration "$mp3_file")
     if [[ -z "$duration" || "$duration" -eq 0 ]]; then
-        echo "  Error: Could not determine audio duration" >&2
+        log_err "  Could not determine audio duration"
         continue
     fi
 
     duration_min=$((duration / 60))
-    echo "  Duration: ${duration_min} minutes (${duration}s)"
+    log "  Duration: ${duration_min} minutes (${duration}s)"
 
     # Select model based on duration
     if [[ "$duration" -gt "$MODEL_THRESHOLD" ]]; then
         selected_model="$FULL_MODEL"
-        echo "  Model: VibeVoice-ASR (long recording)"
+        log "  Model: VibeVoice-ASR (long recording)"
     else
         selected_model="$FAST_MODEL"
-        echo "  Model: whisper-turbo (short recording)"
+        log "  Model: whisper-turbo (short recording)"
     fi
 
     # Check if audio needs to be split into chunks
     if [[ "$duration" -gt "$CHUNK_THRESHOLD" ]]; then
-        echo "  Audio is longer than 55 minutes, splitting into chunks..."
+        log "  Audio is longer than 55 minutes, splitting into chunks..."
 
         # Split audio into chunks
         chunk_base="$INPUT_DIR/${basename_no_ext}"
         chunks=$(split_audio_into_chunks "$mp3_file" "$chunk_base" "$duration")
 
         if [[ -z "$chunks" ]]; then
-            echo "  Error: Failed to create chunks" >&2
+            log_err "  Failed to create chunks"
             continue
         fi
 
@@ -161,17 +170,17 @@ for audio_file in "$INPUT_DIR"/*.ogg "$INPUT_DIR"/*.m4a "$INPUT_DIR"/*.wav "$INP
             chunk_basename=$(basename "$chunk_file" .mp3)
             chunk_output="${output_base}_${chunk_basename##*_}"  # Extract partN from filename
 
-            echo "  Transcribing chunk: $(basename "$chunk_file")..."
+            log "  Transcribing chunk: $(basename "$chunk_file")..."
             if "$PYTHON" -m mlx_audio.stt.generate \
                 --model "$selected_model" \
                 --audio "$chunk_file" \
                 --output-path "${chunk_output}" \
                 --format json \
                 --max-tokens "$MAX_TOKENS"; then
-                echo "    ✓ Chunk transcription saved: ${chunk_output}.json"
+                log "    ✓ Chunk transcription saved: ${chunk_output}.json"
                 chunk_files+=("$chunk_file")
             else
-                echo "    Error: Chunk transcription failed" >&2
+                log_err "    Chunk transcription failed"
                 transcription_failed=true
                 break
             fi
@@ -179,83 +188,83 @@ for audio_file in "$INPUT_DIR"/*.ogg "$INPUT_DIR"/*.m4a "$INPUT_DIR"/*.wav "$INP
 
         # Clean up chunk files if all transcriptions succeeded
         if [[ "$transcription_failed" == false ]]; then
-            echo "  ✓ All chunks transcribed successfully"
+            log "  ✓ All chunks transcribed successfully"
             for chunk_file in "${chunk_files[@]}"; do
                 rm -f "$chunk_file"
-                echo "  ✓ Cleaned up: $(basename "$chunk_file")"
+                log "  ✓ Cleaned up: $(basename "$chunk_file")"
             done
 
             # Move original audio to NAS
             if [ -d "$NAS_RECORDINGS" ]; then
                 mv "$audio_file" "$NAS_RECORDINGS/"
-                echo "  ✓ Moved to NAS: $filename"
+                log "  ✓ Moved to NAS: $filename"
                 # Also move the converted MP3 if it was created
                 if [[ "$converted" == true ]]; then
                     mv "$mp3_file" "$NAS_RECORDINGS/"
-                    echo "  ✓ Moved to NAS: ${basename_no_ext}.mp3"
+                    log "  ✓ Moved to NAS: ${basename_no_ext}.mp3"
                 fi
             else
-                echo "  ⚠ NAS not mounted, keeping files locally"
+                log "  ⚠ NAS not mounted, keeping files locally"
             fi
         else
-            echo "  Error: Some chunks failed to transcribe, keeping all files" >&2
+            log_err "  Some chunks failed to transcribe, keeping all files"
             continue
         fi
     else
         # Audio is under threshold, transcribe as single file (existing behavior)
-        echo "  Transcribing with VibeVoice-ASR (transcription + diarization)..."
+        log "  Transcribing with ${selected_model##*/}..."
         if "$PYTHON" -m mlx_audio.stt.generate \
             --model "$selected_model" \
             --audio "$mp3_file" \
             --output-path "${output_base}" \
             --format json \
             --max-tokens "$MAX_TOKENS"; then
-            echo "  ✓ Transcription saved: ${output_base}.json"
+            log "  ✓ Transcription saved: ${output_base}.json"
 
             # Move audio files to NAS after successful transcription
             if [ -d "$NAS_RECORDINGS" ]; then
                 mv "$audio_file" "$NAS_RECORDINGS/"
-                echo "  ✓ Moved to NAS: $filename"
+                log "  ✓ Moved to NAS: $filename"
                 # Also move the converted MP3 if it was created
                 if [[ "$converted" == true ]]; then
                     mv "$mp3_file" "$NAS_RECORDINGS/"
-                    echo "  ✓ Moved to NAS: ${basename_no_ext}.mp3"
+                    log "  ✓ Moved to NAS: ${basename_no_ext}.mp3"
                 fi
             else
-                echo "  ⚠ NAS not mounted, keeping files locally"
+                log "  ⚠ NAS not mounted, keeping files locally"
             fi
         else
-            echo "  Error: Transcription failed" >&2
+            log_err "  Transcription failed"
             continue
         fi
     fi
 
-    echo "  ✓ Done: $filename"
+    log "  ✓ Done: $filename"
     echo ""
 done
 
-echo "Transcription batch complete."
+log "Transcription batch complete."
 
 # Sync transcripts and workspace to Google Drive
 if [ -d "$GDRIVE_TRANSCRIPTS" ] && [ -d "$GDRIVE_WORKSPACE" ]; then
     echo ""
-    echo "Syncing to Google Drive..."
+    log "Syncing to Google Drive..."
 
     # Sync transcripts
     if rsync -av --delete "$OUTPUT_DIR/" "$GDRIVE_TRANSCRIPTS/"; then
-        echo "  ✓ Transcripts synced to Google Drive"
+        log "  ✓ Transcripts synced to Google Drive"
     else
-        echo "  ⚠ Warning: Failed to sync transcripts to Google Drive" >&2
+        log_err "  ⚠ Warning: Failed to sync transcripts to Google Drive"
     fi
 
     # Sync workspace (if it exists)
     if [ -d "${HOME}/openclaw/workspace" ]; then
         if rsync -av --delete "${HOME}/openclaw/workspace/" "$GDRIVE_WORKSPACE/"; then
-            echo "  ✓ Workspace synced to Google Drive"
+            log "  ✓ Workspace synced to Google Drive"
         else
-            echo "  ⚠ Warning: Failed to sync workspace to Google Drive" >&2
+            log_err "  ⚠ Warning: Failed to sync workspace to Google Drive"
         fi
     fi
 else
-    echo "  ⚠ Google Drive not available, skipping cloud sync"
+    log "  ⚠ Google Drive not available, skipping cloud sync"
 fi

@@ -11,19 +11,28 @@ AGENT_ID="${AGENT_ID:-transcript-processor}"
 
 mkdir -p "$PROCESSED_DIR"
 
-echo "Starting transcript watcher..."
-echo "Watching: $TRANSCRIPTS_DIR"
-echo "Telegram chat ID: $TELEGRAM_CHAT_ID"
+# Logging helpers
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"
+}
+
+log_err() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: $*" >&2
+}
+
+log "Starting transcript watcher..."
+log "Watching: $TRANSCRIPTS_DIR"
+log "Telegram chat ID: $TELEGRAM_CHAT_ID"
 echo ""
 
 if [[ "$TELEGRAM_CHAT_ID" == "YOUR_CHAT_ID" ]]; then
-  echo "ERROR: Please set TELEGRAM_CHAT_ID environment variable"
-  echo "Get your chat ID by sending a message to @userinfobot on Telegram"
+  log_err "Please set TELEGRAM_CHAT_ID environment variable"
+  log_err "Get your chat ID by sending a message to @userinfobot on Telegram"
   exit 1
 fi
 
-echo "Polling every 10 seconds for new transcripts..."
-echo "(VirtioFS shared folders don't support filesystem events)"
+log "Polling every 10 seconds for new transcripts..."
+log "(VirtioFS shared folders don't support filesystem events)"
 echo ""
 
 while true; do
@@ -34,7 +43,7 @@ while true; do
     basename=$(basename "$file")
     [[ -f "$PROCESSED_DIR/$basename" ]] && continue
 
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] New transcript: $basename"
+    log "New transcript: $basename"
 
     CONTENT=$(cat "$file")
 
@@ -54,9 +63,9 @@ $CONTENT" \
 
     if [[ $? -eq 0 ]]; then
       mv "$file" "$PROCESSED_DIR/"
-      echo "  → Processed and archived: $basename"
+      log "  ✓ Processed and archived: $basename"
     else
-      echo "  → Error: Failed to process transcript"
+      log_err "  Failed to process transcript"
     fi
   done
   sleep 10
