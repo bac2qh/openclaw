@@ -1,7 +1,7 @@
 #!/bin/bash
 # Transcribe audio files with mlx-audio (VibeVoice-ASR)
 #
-# This script monitors ~/openclaw/media/recordings/ for new audio files and transcribes them
+# This script monitors ~/openclaw/media/inbound/ for new audio files and transcribes them
 # using mlx-audio with Microsoft's VibeVoice-ASR model (includes speaker diarization).
 # Transcripts are saved to ~/openclaw/transcripts/ (shared with VM), then synced to Google Drive.
 # After successful transcription, audio files are moved to NAS for archival.
@@ -10,7 +10,7 @@
 # Files are converted to MP3 before transcription (miniaudio compatibility).
 #
 # Usage:
-#   1. Drop audio files into ~/openclaw/media/recordings/
+#   1. Drop audio files into ~/openclaw/media/inbound/
 #   2. Run manually: ~/openclaw/scripts/transcribe.sh
 #   3. Or auto-run via launchd (see setup guide)
 #
@@ -25,7 +25,7 @@ set -euo pipefail
 
 # Configuration
 PYTHON="${HOME}/openclaw/scripts/.venv/bin/python"
-INPUT_DIR="${HOME}/openclaw/media/recordings"
+INPUT_DIR="${HOME}/openclaw/media/inbound"
 OUTPUT_DIR="${HOME}/openclaw/transcripts"
 GDRIVE_TRANSCRIPTS="${HOME}/Insync/bac2qh@gmail.com/Google Drive/openclaw/transcripts"
 GDRIVE_WORKSPACE="${HOME}/Insync/bac2qh@gmail.com/Google Drive/openclaw/workspace"
