@@ -30,7 +30,8 @@ OUTPUT_DIR="${HOME}/openclaw/transcripts"
 GDRIVE_TRANSCRIPTS="${HOME}/Insync/bac2qh@gmail.com/Google Drive/openclaw/transcripts"
 GDRIVE_WORKSPACE="${HOME}/Insync/bac2qh@gmail.com/Google Drive/openclaw/workspace"
 NAS_RECORDINGS="/Volumes/NAS_1/Xin/openclaw/media/recordings"
-VIBEVOICE_MODEL="mlx-community/VibeVoice-ASR-bf16"
+VIBEVOICE_MODEL="mlx-community/whisper-large-v3-turbo-asr-fp16"
+# VIBEVOICE_MODEL="mlx-community/VibeVoice-ASR-bf16"
 MAX_TOKENS=65536
 
 # Chunking configuration (for long recordings)
