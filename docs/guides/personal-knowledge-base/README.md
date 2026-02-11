@@ -1126,6 +1126,77 @@ lume restart memory-app
 
 ## Troubleshooting
 
+### Browser Not Starting in VM
+
+If Chrome/Chromium fails to start inside a Lume macOS VM (error: "failed to start chrome CDP on port 18800"), it's usually due to Gatekeeper quarantine or missing GUI session.
+
+**Root cause:** Homebrew-installed Chromium gets quarantined by macOS. Without a GUI prompt to approve, it silently fails to launch. SSH-only VMs also lack an Aqua session for window display.
+
+**Fix 1: Remove Gatekeeper quarantine**
+
+```bash
+# Inside VM
+xattr -dr com.apple.quarantine /Applications/Chromium.app
+```
+
+**Fix 2: Enable headless mode**
+
+Headless mode works without GUI session (required for SSH-only VMs):
+
+```bash
+# Inside VM
+openclaw config set browser.headless true
+```
+
+**Fix 3: Set executable path explicitly**
+
+If auto-detection fails, override the path:
+
+```bash
+# Inside VM
+openclaw config set browser.executablePath "/Applications/Chromium.app/Contents/MacOS/Chromium"
+```
+
+For non-standard installs, adjust the path accordingly.
+
+**Fix 4: Disable sandbox (last resort)**
+
+If the above don't work, disable Chrome's sandbox (reduces security):
+
+```bash
+# Inside VM
+openclaw config set browser.noSandbox true
+```
+
+**Verify CDP is reachable**
+
+Test manually to confirm Chrome starts and CDP responds:
+
+```bash
+# Inside VM - spawn Chromium with CDP
+/Applications/Chromium.app/Contents/MacOS/Chromium \
+  --headless=new \
+  --remote-debugging-port=18800 \
+  --no-first-run \
+  --disable-gpu &
+
+# Wait 5 seconds, then test CDP
+sleep 5
+curl -s http://127.0.0.1:18800/json/version
+
+# Kill test instance
+pkill -f "Chromium.*remote-debugging-port=18800"
+```
+
+Expected output: JSON with browser version and WebSocket debugger URL.
+
+**Config reference**
+
+For more browser configuration options, see:
+- Browser tool documentation: `docs/tools/browser.md`
+- Browser implementation: `src/browser/chrome.ts:296` (CDP startup logic)
+- Executable detection: `src/browser/chrome.executables.ts:456-507` (macOS paths)
+
 ### mlx-audio Issues
 
 **Model not downloading:**
