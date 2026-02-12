@@ -125,6 +125,8 @@ Build a voice-powered memory system using OpenClaw, mlx-audio (VibeVoice), Lume 
 7. [Cost Breakdown](#part-7-cost-summary)
 8. [Troubleshooting](#troubleshooting)
 9. [Audio Flow Details](./telegram-audio-flow.md) - Technical documentation of audio flows
+10. [Getting Claude API Access](#part-10-getting-claude-api-access)
+11. [LLM Provider Configuration](#part-11-llm-provider-configuration)
 
 ---
 
@@ -1077,6 +1079,118 @@ Console → Settings → Limits → Monthly spend: $20
 
 ```bash
 openclaw agent --message "Hello, confirm you are Sonnet 4"
+```
+
+---
+
+## Part 11: LLM Provider Configuration
+
+### 11.1 Where Credentials Live
+
+OpenClaw stores LLM provider credentials in multiple locations depending on the authentication method:
+
+- **API keys and OAuth tokens:** `~/.openclaw/agents/<agentId>/auth-profiles.json` (per-agent auth profiles)
+- **Model selection:** `~/.openclaw/openclaw.json` (global config)
+- **Environment variable fallbacks:** `ANTHROPIC_API_KEY`, `ZAI_API_KEY`, `OPENAI_API_KEY`, etc.
+
+For most users, the simplest approach is to use `openclaw config set` commands, which automatically store credentials in the appropriate location.
+
+### 11.2 Common Operations
+
+| Task | Command |
+|------|---------|
+| Add a provider (interactive) | `openclaw onboard --auth-choice <choice>` |
+| Set default model | `openclaw config set agents.defaults.model "<provider/model>"` |
+| Set API key via config | `openclaw config set providers.<name>.apiKey "sk-..."` |
+| View configured channels | `openclaw channels status` |
+| Probe channel health | `openclaw channels status --probe` |
+| View current config | `openclaw config get agents.defaults` |
+
+### 11.3 Supported Providers
+
+OpenClaw supports a wide range of LLM providers:
+
+- **Anthropic:** Claude 3.5 Sonnet, Claude 3 Opus, Claude 3.5 Haiku
+- **OpenAI:** GPT-4, GPT-4 Turbo (Codex)
+- **Google:** Gemini Pro, Gemini Ultra
+- **Moonshot:** Kimi (moonshot-v1)
+- **MiniMax:** MiniMax-01, MiniMax-Text-01
+- **Z.AI (Zhipu AI):** GLM-4, GLM-5
+- **Xiaomi:** Xiaomi-LLM
+- **OpenRouter:** Multi-provider gateway
+- **Vercel AI Gateway:** Vercel-hosted models
+- **Cloudflare AI Gateway:** Cloudflare Workers AI
+- **OpenCode Zen:** OpenCode models
+- **Synthetic:** Synthetic LLM
+- **Venice:** Venice AI
+- **GitHub Copilot:** GitHub-hosted models
+- **Qwen:** Qwen models
+
+### 11.4 Example: Adding Z.AI GLM as a Second Provider
+
+This example shows how to add Z.AI (Zhipu AI) GLM alongside your existing Anthropic provider:
+
+**Step 1: Get your Z.AI API key**
+
+1. Sign up at https://open.bigmodel.cn/
+2. Navigate to API Keys section
+3. Create a new API key
+4. Copy the key (starts with a random string)
+
+**Step 2: Configure Z.AI in OpenClaw**
+
+```bash
+# Inside VM (or on host if running OpenClaw directly)
+# Option A: Interactive onboarding
+openclaw onboard --auth-choice zai-api-key
+
+# Follow the prompts and paste your Z.AI API key when asked
+
+# Option B: Direct config command
+openclaw config set providers.zai.apiKey "YOUR_ZAI_API_KEY"
+```
+
+**Step 3: Switch to GLM-5 as default model**
+
+```bash
+# Set Z.AI GLM-5 as your default model
+openclaw config set agents.defaults.model "zai/glm-5"
+
+# Verify the change
+openclaw config get agents.defaults.model
+```
+
+**Step 4: Verify provider is working**
+
+```bash
+# Check channel status (includes provider health)
+openclaw channels status
+
+# Test with a direct message
+openclaw agent --message "Hello, confirm your model name"
+```
+
+**Expected output:** The agent should respond confirming it's using GLM-5.
+
+**Switching back to Claude:**
+
+```bash
+# Switch back to Claude Sonnet 4
+openclaw config set agents.defaults.model "claude-sonnet-4-20250514"
+```
+
+**Using multiple providers simultaneously:**
+
+You can configure different agents to use different providers:
+
+```bash
+# Create a GLM-powered agent for cost-sensitive tasks
+openclaw agents add glm-agent
+openclaw config set agents.profiles.glm-agent.model "zai/glm-5"
+
+# Create a Claude-powered agent for complex reasoning
+openclaw agents add claude-agent
+openclaw config set agents.profiles.claude-agent.model "claude-sonnet-4-20250514"
 ```
 
 ---
