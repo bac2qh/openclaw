@@ -1193,6 +1193,112 @@ openclaw agents add claude-agent
 openclaw config set agents.profiles.claude-agent.model "claude-sonnet-4-20250514"
 ```
 
+### 11.5 Manual Provider Configuration (Version-Independent)
+
+The `models.providers` config accepts any provider name and model definition, so you can register providers and models without waiting for an OpenClaw update. This is useful when a provider releases new models that are not yet in the built-in catalog.
+
+**Registering a provider manually:**
+
+```bash
+openclaw config set models.providers.<provider-name> '{
+  "baseUrl": "<provider-api-endpoint>",
+  "api": "<api-type>",
+  "apiKey": "<your-api-key>",
+  "models": [
+    {
+      "id": "<model-id>",
+      "name": "<display-name>",
+      "reasoning": true,
+      "input": ["text"],
+      "contextWindow": 128000,
+      "maxTokens": 16384
+    }
+  ]
+}'
+```
+
+**Supported `api` types:**
+
+| Type | Compatible providers |
+|------|---------------------|
+| `openai-completions` | OpenAI, Z.AI, Moonshot, xAI, OpenRouter, most OpenAI-compatible APIs |
+| `openai-responses` | OpenAI Responses API |
+| `anthropic-messages` | Anthropic |
+| `google-generative-ai` | Google Gemini |
+| `bedrock-converse-stream` | AWS Bedrock |
+| `github-copilot` | GitHub Copilot |
+
+**Example: Registering Z.AI with GLM-5 manually**
+
+If your installed OpenClaw version does not include Z.AI support yet, you can add it yourself:
+
+```bash
+# Register the Z.AI provider with GLM-5
+openclaw config set models.providers.zai '{
+  "baseUrl": "https://api.z.ai/api/coding/paas/v4",
+  "api": "openai-completions",
+  "apiKey": "YOUR_ZAI_API_KEY",
+  "models": [
+    {
+      "id": "glm-5",
+      "name": "GLM-5",
+      "reasoning": true,
+      "input": ["text"],
+      "contextWindow": 128000,
+      "maxTokens": 16384
+    }
+  ]
+}'
+
+# Set GLM-5 as default
+openclaw config set agents.defaults.model.primary "zai/glm-5"
+```
+
+For users in mainland China, use the CN endpoint instead:
+
+```bash
+"baseUrl": "https://open.bigmodel.cn/api/coding/paas/v4"
+```
+
+**Adding new models to an existing provider:**
+
+When a provider releases a new model, add it to the `models` array. For example, to add a hypothetical `glm-6` alongside the existing `glm-5`:
+
+```bash
+openclaw config set models.providers.zai.models '[
+  {
+    "id": "glm-5",
+    "name": "GLM-5",
+    "reasoning": true,
+    "input": ["text"],
+    "contextWindow": 128000,
+    "maxTokens": 16384
+  },
+  {
+    "id": "glm-6",
+    "name": "GLM-6",
+    "reasoning": true,
+    "input": ["text"],
+    "contextWindow": 128000,
+    "maxTokens": 16384
+  }
+]'
+
+# Switch to the new model
+openclaw config set agents.defaults.model.primary "zai/glm-6"
+```
+
+**Model definition fields:**
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `id` | Yes | Model ID sent to the API (e.g., `glm-5`) |
+| `name` | Yes | Display name in status/logs |
+| `reasoning` | No | Whether the model supports reasoning/thinking |
+| `input` | No | Input modalities: `["text"]` or `["text", "image"]` |
+| `contextWindow` | No | Max input tokens (check provider docs) |
+| `maxTokens` | No | Max output tokens (check provider docs) |
+
 ---
 
 ## Useful Commands
