@@ -1210,8 +1210,8 @@ openclaw config set models.providers.<provider-name> '{
       "name": "<display-name>",
       "reasoning": true,
       "input": ["text"],
-      "contextWindow": 128000,
-      "maxTokens": 16384
+      "contextWindow": 204800,
+      "maxTokens": 131072
     }
   ]
 }'
@@ -1244,8 +1244,8 @@ openclaw config set models.providers.zai '{
       "name": "GLM-5",
       "reasoning": true,
       "input": ["text"],
-      "contextWindow": 128000,
-      "maxTokens": 16384
+      "contextWindow": 204800,
+      "maxTokens": 131072
     }
   ]
 }'
@@ -1271,16 +1271,16 @@ openclaw config set models.providers.zai.models '[
     "name": "GLM-5",
     "reasoning": true,
     "input": ["text"],
-    "contextWindow": 128000,
-    "maxTokens": 16384
+    "contextWindow": 204800,
+    "maxTokens": 131072
   },
   {
     "id": "glm-6",
     "name": "GLM-6",
     "reasoning": true,
     "input": ["text"],
-    "contextWindow": 128000,
-    "maxTokens": 16384
+    "contextWindow": 204800,
+    "maxTokens": 131072
   }
 ]'
 
