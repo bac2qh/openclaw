@@ -675,36 +675,26 @@ To send transcripts back to Telegram, you need your chat ID:
 tail -f /tmp/openclaw-gateway.log | grep "chat"
 ```
 
-### 5.4a Create a Dedicated Transcript Processor Agent
+### 5.4a Voice Transcript Session Routing
 
-**Critical: Avoid Session Lock Contention**
+Voice transcripts are routed based on duration:
 
-The transcript watcher uses `openclaw agent --message` to process transcripts, which can take up to 5 minutes for long recordings. If the watcher shares the same agent session as your regular Telegram conversations, you'll experience:
+- **Short recordings (< 10 min):** Processed in the **same session** as your interactive Telegram messages. This gives the agent full conversational context — you can say something in a voice message and reference it in text (and vice versa).
+- **Long recordings (≥ 10 min):** Processed by a **separate agent** (`transcript-processor`) to avoid blocking interactive messages for hours. After processing, a brief context summary is relayed to your main session so the agent knows what was discussed.
 
-- **Session lock contention** - regular text messages fail silently while transcript processing holds the lock
-- **Context pollution** - transcript processing turns interleave with regular conversation
-- **Malformed tool calls** - confused context causes errors like "read tool called without path"
+The Gateway serializes agent runs per session, so short transcripts don't cause lock contention. The 10-minute threshold balances context sharing with responsiveness.
 
-> **Important:** Using the same agent for both interactive Telegram messages and background transcript processing causes session lock contention. The transcript processor holds the session lock for up to 5 minutes, during which regular messages may fail silently (AI says "Noted" but nothing persists).
-
-**Solution: Create a dedicated agent that shares the workspace**
+**Create the transcript processor agent** (needed for long recordings):
 
 ```bash
 # Inside VM - create agent that shares the main workspace
 openclaw agents add transcript-processor --workspace ~/.openclaw/workspace
 ```
 
-This gives the transcript processor:
-- ✅ **Its own session** (no lock contention with the main agent)
-- ✅ **Shared workspace directory** (memory files accessible to both agents)
-- ✅ **Independent processing** (can handle long transcripts without blocking interactive messages)
-
-The `transcript-watcher.sh` script defaults to using `transcript-processor` as the agent ID. If you need to override it, set the `AGENT_ID` environment variable:
-
-```bash
-# Override default agent (not recommended unless you know what you're doing)
-AGENT_ID=custom-agent TELEGRAM_CHAT_ID=YOUR_CHAT_ID /Volumes/My\ Shared\ Files/scripts/transcript-watcher.sh
-```
+> **Customization:** Override the threshold and agent ID via environment variables:
+> ```bash
+> DURATION_THRESHOLD=300 AGENT_ID=custom-agent TELEGRAM_CHAT_ID=YOUR_CHAT_ID ./transcript-watcher.sh
+> ```
 
 ### 5.5 Running the Watchers
 
@@ -724,7 +714,7 @@ chmod +x ~/audio-watcher.sh
 ~/audio-watcher.sh
 ```
 
-**Terminal 1: Start Watcher 2 (Transcript Processor) - Inside VM**
+**Terminal 1: Start Transcript Watcher - Inside VM**
 
 **Important:** This watcher uses `openclaw agent --message` to trigger **AI processing** of transcripts. It adapts based on transcript metadata (duration, speakers, word count) to intelligently handle voice memos (brief storage) vs. meetings (full summary + action items). Requires `agents.defaults.memorySearch.experimental.sessionMemory: true` for automatic indexing.
 
@@ -1543,24 +1533,13 @@ openclaw channels status --probe
 
 If the AI responds "Noted" or confirms it saved information, but nothing appears in memory files or search results:
 
-**Check for session lock contention:**
+**Check transcript routing:**
 
-```bash
-# Inside VM - check if transcript-watcher is running
-tmux ls
+Short voice memos (< 10 min) share the main session and should persist memory automatically. For long recordings processed by the separate agent, verify:
 
-# Verify it's using a separate agent (not "main")
-# Check the watcher script
-grep AGENT_ID /Volumes/My\ Shared\ Files/scripts/transcript-watcher.sh
-
-# Should show: AGENT_ID="${AGENT_ID:-transcript-processor}"
-```
-
-**If using the same agent for both interactive and background processing:**
-
-1. Create a dedicated transcript processor agent (see [5.4a Create a Dedicated Transcript Processor Agent](#54a-create-a-dedicated-transcript-processor-agent))
-2. Restart the transcript-watcher with the new agent
-3. Verify memory saves now work during transcript processing
+1. The `transcript-processor` agent exists: `openclaw agents list`
+2. It shares the workspace: `openclaw agents get transcript-processor` (check `--workspace`)
+3. The relay message was sent after processing (check watcher logs)
 
 **Test memory persistence:**
 

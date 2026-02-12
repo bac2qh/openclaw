@@ -1,6 +1,8 @@
 #!/bin/bash
 # Watches for transcripts, sends to Telegram via openclaw
-# Part of the 2-watcher async transcription pipeline
+# Short voice memos (<10 min) share the interactive Telegram session for
+# full conversational context. Long recordings use a separate agent to
+# avoid blocking, then relay key context to the main session.
 #
 # Watches the shared transcripts folder where host mlx-audio writes transcripts
 
@@ -8,6 +10,7 @@ TRANSCRIPTS_DIR="/Volumes/My Shared Files/transcripts"
 PROCESSED_DIR="/Volumes/My Shared Files/transcripts/processed"
 TELEGRAM_CHAT_ID="${TELEGRAM_CHAT_ID:-YOUR_CHAT_ID}"
 AGENT_ID="${AGENT_ID:-transcript-processor}"
+DURATION_THRESHOLD="${DURATION_THRESHOLD:-600}"  # 10 minutes in seconds
 
 mkdir -p "$PROCESSED_DIR"
 
@@ -47,19 +50,83 @@ while true; do
 
     CONTENT=$(cat "$file")
 
-    openclaw agent \
-      --agent "$AGENT_ID" \
-      --to "$TELEGRAM_CHAT_ID" \
-      --channel telegram \
-      --deliver \
-      --message "Process this voice transcript JSON. Determine from the content and metadata whether this is a quick voice memo, a note, or a multi-person meeting, then process accordingly:
+    # Extract duration from transcript JSON (last segment's end_time)
+    DURATION_SECS=$(echo "$CONTENT" | node -e "
+      let buf = '';
+      process.stdin.setEncoding('utf8');
+      process.stdin.on('data', c => buf += c);
+      process.stdin.on('end', () => {
+        try {
+          const d = JSON.parse(buf);
+          const s = d.segments || [];
+          console.log(s.length ? Math.floor(s[s.length - 1].end_time || 0) : 0);
+        } catch { console.log('0'); }
+      });
+    ")
+
+    if [[ "$DURATION_SECS" -lt "$DURATION_THRESHOLD" ]]; then
+      # Short transcript: route to main session for shared context
+      log "  Duration: ${DURATION_SECS}s (< ${DURATION_THRESHOLD}s) → main session"
+      openclaw agent \
+        --to "$TELEGRAM_CHAT_ID" \
+        --channel telegram \
+        --deliver \
+        --message "Process this voice transcript JSON. Determine from the content and metadata whether this is a quick voice memo, a note, or a multi-person meeting, then process accordingly:
 - **Voice memo/note**: Store the key facts in memory. Keep it brief.
 - **Meeting**: Summarize key discussion points (3-5 bullets), extract action items with owners, identify decisions made, and update memory.
 
 Transcript JSON:
 $CONTENT" \
-      --thinking medium \
-      --timeout 3000
+        --thinking medium \
+        --timeout 3000
+    else
+      # Long transcript: route to separate agent to avoid blocking
+      log "  Duration: ${DURATION_SECS}s (≥ ${DURATION_THRESHOLD}s) → separate agent"
+      openclaw agent \
+        --agent "$AGENT_ID" \
+        --to "$TELEGRAM_CHAT_ID" \
+        --channel telegram \
+        --deliver \
+        --message "Process this voice transcript JSON. Determine from the content and metadata whether this is a quick voice memo, a note, or a multi-person meeting, then process accordingly:
+- **Voice memo/note**: Store the key facts in memory. Keep it brief.
+- **Meeting**: Summarize key discussion points (3-5 bullets), extract action items with owners, identify decisions made, and update memory.
+
+Transcript JSON:
+$CONTENT" \
+        --thinking medium \
+        --timeout 3000
+
+      # Relay brief context to main session so it knows what was discussed
+      if [[ $? -eq 0 ]]; then
+        SUMMARY=$(echo "$CONTENT" | node -e "
+          let buf = '';
+          process.stdin.setEncoding('utf8');
+          process.stdin.on('data', c => buf += c);
+          process.stdin.on('end', () => {
+            try {
+              const d = JSON.parse(buf);
+              const s = d.segments || [];
+              const fullText = s.map(seg => seg.text || '').join(' ');
+              const duration = s.length ? Math.floor(s[s.length - 1].end_time || 0) : 0;
+              const speakers = [...new Set(s.map(seg => seg.speaker_id).filter(Boolean))];
+              const mins = Math.round(duration / 60);
+              const preview = fullText.substring(0, 300);
+              console.log(JSON.stringify({
+                duration: mins + ' min',
+                speakers: speakers.length || 1,
+                preview
+              }));
+            } catch { console.log(JSON.stringify({ duration: 'unknown', speakers: 0, preview: '' })); }
+          });
+        ")
+        openclaw agent \
+          --to "$TELEGRAM_CHAT_ID" \
+          --channel telegram \
+          --message "[Voice transcript context relay — a long recording was processed in a background session. Store these facts in memory for conversational context. Metadata: $SUMMARY]" \
+          --thinking low \
+          --timeout 120
+      fi
+    fi
 
     if [[ $? -eq 0 ]]; then
       mv "$file" "$PROCESSED_DIR/"
