@@ -6,7 +6,7 @@
 # Transcripts are saved to ~/openclaw/transcripts/ (shared with VM), then synced to Google Drive.
 # After successful transcription, audio files are moved to NAS for archival.
 #
-# Supported input formats: any format ffmpeg can decode (ogg, m4a, wav, mp3, flac, etc.)
+# Supported input formats: ogg, m4a (Telegram voice/audio messages)
 # Files are converted to MP3 before transcription (miniaudio compatibility).
 #
 # Usage:
@@ -103,7 +103,7 @@ fi
 
 # Process each audio file (any format ffmpeg supports)
 shopt -s nullglob
-for audio_file in "$INPUT_DIR"/*.ogg "$INPUT_DIR"/*.m4a "$INPUT_DIR"/*.wav "$INPUT_DIR"/*.mp3 "$INPUT_DIR"/*.flac "$INPUT_DIR"/*.aiff "$INPUT_DIR"/*.mp4 "$INPUT_DIR"/*.webm; do
+for audio_file in "$INPUT_DIR"/*.ogg "$INPUT_DIR"/*.m4a; do
     # Skip if no files match
     [ -e "$audio_file" ] || continue
 
@@ -198,10 +198,10 @@ for audio_file in "$INPUT_DIR"/*.ogg "$INPUT_DIR"/*.m4a "$INPUT_DIR"/*.wav "$INP
             if [ -d "$NAS_RECORDINGS" ]; then
                 mv "$audio_file" "$NAS_RECORDINGS/"
                 log "  ✓ Moved to NAS: $filename"
-                # Also move the converted MP3 if it was created
+                # Remove the converted MP3 (only needed for transcription)
                 if [[ "$converted" == true ]]; then
-                    mv "$mp3_file" "$NAS_RECORDINGS/"
-                    log "  ✓ Moved to NAS: ${basename_no_ext}.mp3"
+                    rm -f "$mp3_file"
+                    log "  ✓ Removed converted MP3: ${basename_no_ext}.mp3"
                 fi
             else
                 log "  ⚠ NAS not mounted, keeping files locally"
@@ -225,10 +225,10 @@ for audio_file in "$INPUT_DIR"/*.ogg "$INPUT_DIR"/*.m4a "$INPUT_DIR"/*.wav "$INP
             if [ -d "$NAS_RECORDINGS" ]; then
                 mv "$audio_file" "$NAS_RECORDINGS/"
                 log "  ✓ Moved to NAS: $filename"
-                # Also move the converted MP3 if it was created
+                # Remove the converted MP3 (only needed for transcription)
                 if [[ "$converted" == true ]]; then
-                    mv "$mp3_file" "$NAS_RECORDINGS/"
-                    log "  ✓ Moved to NAS: ${basename_no_ext}.mp3"
+                    rm -f "$mp3_file"
+                    log "  ✓ Removed converted MP3: ${basename_no_ext}.mp3"
                 fi
             else
                 log "  ⚠ NAS not mounted, keeping files locally"
