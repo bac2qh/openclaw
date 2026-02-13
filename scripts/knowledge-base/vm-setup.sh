@@ -6,10 +6,17 @@
 #
 # Usage: curl -fsSL <url>/vm-setup.sh | bash
 #        or: ./vm-setup.sh
+#        or: OPENCLAW_STATE_DIR=~/.openclaw-wife ./vm-setup.sh  # For second user
+#
+# Environment variables:
+#   OPENCLAW_STATE_DIR - OpenClaw state directory (default: ~/.openclaw)
 
 set -euo pipefail
 
+OPENCLAW_STATE_DIR="${OPENCLAW_STATE_DIR:-$HOME/.openclaw}"
+
 echo "=== OpenClaw VM Setup ==="
+echo "State directory: $OPENCLAW_STATE_DIR"
 echo ""
 
 # Detect OS
@@ -59,22 +66,18 @@ openclaw --version
 # Create directories
 echo ""
 echo "=== Creating Directories ==="
-mkdir -p ~/.openclaw/workspace/memory
-mkdir -p ~/.openclaw/workspace/transcripts
+mkdir -p "${OPENCLAW_STATE_DIR}/workspace/memory"
+mkdir -p "${OPENCLAW_STATE_DIR}/media"
 
-# Check for shared folder
-if [ -d /mnt/transcripts ]; then
-    echo "Found shared transcripts folder at /mnt/transcripts"
-    ln -sf /mnt/transcripts ~/.openclaw/workspace/transcripts
-    echo "Symlinked to ~/.openclaw/workspace/transcripts"
-else
-    echo "Note: /mnt/transcripts not found."
-    echo "If using Lume, ensure shared_directories is configured."
-fi
+# Check for shared folder (user-specific paths expected)
+# Note: For multi-user setup, symlink to /Volumes/My Shared Files/{USER_PROFILE}/...
+echo "Note: After setup, create symlinks to shared folders:"
+echo "  ln -s '/Volumes/My Shared Files/{USER_PROFILE}/media/inbound' ${OPENCLAW_STATE_DIR}/media/inbound"
+echo "  ln -s '/Volumes/My Shared Files/{USER_PROFILE}/workspace' ${OPENCLAW_STATE_DIR}/workspace"
 
 # Create initial memory file
-if [ ! -f ~/.openclaw/workspace/MEMORY.md ]; then
-    cat > ~/.openclaw/workspace/MEMORY.md << 'EOF'
+if [ ! -f "${OPENCLAW_STATE_DIR}/workspace/MEMORY.md" ]; then
+    cat > "${OPENCLAW_STATE_DIR}/workspace/MEMORY.md" << 'EOF'
 # Long-Term Memory
 
 ## About Me
@@ -100,20 +103,27 @@ echo ""
 echo "=== Setup Complete ==="
 echo ""
 echo "Next steps:"
-echo "1. Configure API keys:"
+echo "1. Set OPENCLAW_STATE_DIR (if using non-default location):"
+echo "   export OPENCLAW_STATE_DIR=${OPENCLAW_STATE_DIR}"
+echo ""
+echo "2. Configure API keys:"
 echo "   openclaw config set providers.anthropic.apiKey 'sk-ant-...'"
 echo "   openclaw config set providers.openai.apiKey 'sk-...'"
 echo ""
-echo "2. Configure Telegram:"
+echo "3. Configure Telegram:"
 echo "   openclaw config set channels.telegram.token 'YOUR_BOT_TOKEN'"
 echo "   openclaw config set channels.telegram.allowlist '[\"YOUR_USER_ID\"]'"
 echo ""
-echo "3. Enable memory search:"
+echo "4. Enable memory search:"
 echo "   openclaw config set agents.defaults.memorySearch.enabled true"
 echo ""
-echo "4. Enable session memory for transcript processing:"
+echo "5. Enable session memory for transcript processing:"
 echo "   openclaw config set agents.defaults.memorySearch.experimental.sessionMemory true"
 echo ""
-echo "5. Start the gateway:"
+echo "6. Set gateway port (if running multiple instances):"
+echo "   openclaw config set gateway.port 18789  # Default for first user"
+echo "   openclaw config set gateway.port 18790  # For second user"
+echo ""
+echo "7. Start the gateway:"
 echo "   openclaw gateway run"
 echo ""

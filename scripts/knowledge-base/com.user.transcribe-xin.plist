@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Auto-transcription LaunchAgent for macOS (Xin's profile)
+
+  This plist watches ~/openclaw/xin/media/inbound/ for new files and triggers transcription.
+
+  Installation:
+    1. Copy to ~/Library/LaunchAgents/com.user.transcribe-xin.plist
+    2. IMPORTANT: Update the hardcoded paths below to match your macOS username:
+       - Line 28: /Users/xin.ding/openclaw/scripts/transcribe.sh
+       - Line 34: /Users/xin.ding/openclaw/xin/media/inbound
+    3. Load with: launchctl load ~/Library/LaunchAgents/com.user.transcribe-xin.plist
+
+  Uninstall:
+    launchctl unload ~/Library/LaunchAgents/com.user.transcribe-xin.plist
+    rm ~/Library/LaunchAgents/com.user.transcribe-xin.plist
+
+  Logs:
+    tail -f /tmp/transcribe-xin.log
+    tail -f /tmp/transcribe-xin.err
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.user.transcribe-xin</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>/Users/xin.ding/openclaw/scripts/transcribe.sh</string>
+    </array>
+
+    <!-- Watch for new files in xin's inbound folder -->
+    <key>WatchPaths</key>
+    <array>
+        <string>/Users/xin.ding/openclaw/xin/media/inbound</string>
+    </array>
+
+    <!-- Environment variables -->
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+        <key>USER_PROFILE</key>
+        <string>xin</string>
+    </dict>
+
+    <!-- Logging -->
+    <key>StandardOutPath</key>
+    <string>/tmp/transcribe-xin.log</string>
+    <key>StandardErrorPath</key>
+    <string>/tmp/transcribe-xin.err</string>
+
+    <!-- Keep alive (restart if crashes) -->
+    <key>KeepAlive</key>
+    <false/>
+
+    <!-- Run at load (optional) -->
+    <key>RunAtLoad</key>
+    <false/>
+</dict>
+</plist>

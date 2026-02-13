@@ -3,58 +3,71 @@
 #
 # Creates timestamped backups of OpenClaw config, memory, and transcripts.
 #
-# Usage: ./backup.sh [destination]
+# Usage: USER_PROFILE=xin ./backup.sh [destination]
 #
-# Default destination: ~/backups/openclaw-YYYY-MM-DD/
+# Environment variables:
+#   USER_PROFILE - User profile name (default: xin)
+#
+# Default destination: ~/backups/openclaw-{USER_PROFILE}-YYYY-MM-DD/
 
 set -euo pipefail
 
+USER_PROFILE="${USER_PROFILE:-xin}"
+
+# Validate USER_PROFILE contains only safe characters
+if [[ ! "$USER_PROFILE" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+    echo "ERROR: USER_PROFILE must contain only alphanumeric characters, hyphens, and underscores" >&2
+    exit 1
+fi
+
+BASE_DIR="${HOME}/openclaw/${USER_PROFILE}"
 BACKUP_BASE="${1:-$HOME/backups}"
 TIMESTAMP=$(date +%Y-%m-%d)
-BACKUP_DIR="$BACKUP_BASE/openclaw-$TIMESTAMP"
+BACKUP_DIR="$BACKUP_BASE/openclaw-${USER_PROFILE}-$TIMESTAMP"
 
-echo "=== OpenClaw Backup ==="
+echo "=== OpenClaw Backup (${USER_PROFILE}) ==="
 echo "Destination: $BACKUP_DIR"
 echo ""
 
 mkdir -p "$BACKUP_DIR"
 
-# Backup OpenClaw config
+# Backup user profile data
+if [ -d "$BASE_DIR" ]; then
+    echo "Backing up ${BASE_DIR}..."
+    cp -r "$BASE_DIR" "$BACKUP_DIR/user-data"
+    echo "  ✓ User data backed up"
+else
+    echo "  ! ${BASE_DIR} not found, skipping"
+fi
+
+# Backup OpenClaw VM config (optional)
 if [ -d ~/.openclaw ]; then
-    echo "Backing up ~/.openclaw..."
+    echo "Backing up ~/.openclaw (VM config)..."
     cp -r ~/.openclaw "$BACKUP_DIR/openclaw-config"
-    echo "  ✓ Config backed up"
+    echo "  ✓ VM config backed up"
 else
     echo "  ! ~/.openclaw not found, skipping"
 fi
 
-# Backup transcripts
-if [ -d ~/transcripts ]; then
-    echo "Backing up ~/transcripts..."
-    cp -r ~/transcripts "$BACKUP_DIR/transcripts"
-    echo "  ✓ Transcripts backed up"
-else
-    echo "  ! ~/transcripts not found, skipping"
-fi
-
-# Backup audio archive (optional)
-if [ -d ~/audio-archive ]; then
-    ARCHIVE_SIZE=$(du -sh ~/audio-archive 2>/dev/null | cut -f1)
-    echo "Audio archive found ($ARCHIVE_SIZE)"
-    read -p "Include audio archive in backup? [y/N] " -n 1 -r
+# Backup Google Drive data (optional)
+GDRIVE_BASE="${HOME}/Insync/bac2qh@gmail.com/Google Drive/openclaw/${USER_PROFILE}"
+if [ -d "$GDRIVE_BASE" ]; then
+    GDRIVE_SIZE=$(du -sh "$GDRIVE_BASE" 2>/dev/null | cut -f1)
+    echo "Google Drive data found ($GDRIVE_SIZE)"
+    read -p "Include Google Drive data in backup? [y/N] " -n 1 -r
     echo ""
     if [[ $REPLY =~ ^[Yy]$ ]]; then
-        echo "Backing up ~/audio-archive..."
-        cp -r ~/audio-archive "$BACKUP_DIR/audio-archive"
-        echo "  ✓ Audio archive backed up"
+        echo "Backing up Google Drive data..."
+        cp -r "$GDRIVE_BASE" "$BACKUP_DIR/gdrive-data"
+        echo "  ✓ Google Drive data backed up"
     fi
 fi
 
 # Create compressed archive
 echo ""
 echo "Compressing backup..."
-ARCHIVE_FILE="$BACKUP_BASE/openclaw-$TIMESTAMP.tar.gz"
-tar -czf "$ARCHIVE_FILE" -C "$BACKUP_BASE" "openclaw-$TIMESTAMP"
+ARCHIVE_FILE="$BACKUP_BASE/openclaw-${USER_PROFILE}-$TIMESTAMP.tar.gz"
+tar -czf "$ARCHIVE_FILE" -C "$BACKUP_BASE" "openclaw-${USER_PROFILE}-$TIMESTAMP"
 
 # Cleanup uncompressed backup
 rm -rf "$BACKUP_DIR"
@@ -68,5 +81,5 @@ echo "Size: $ARCHIVE_SIZE"
 echo ""
 echo "To restore:"
 echo "  tar -xzf $ARCHIVE_FILE -C ~/"
-echo "  cp -r ~/openclaw-$TIMESTAMP/openclaw-config ~/.openclaw"
-echo "  cp -r ~/openclaw-$TIMESTAMP/transcripts ~/transcripts"
+echo "  cp -r ~/openclaw-${USER_PROFILE}-$TIMESTAMP/user-data ~/openclaw/${USER_PROFILE}"
+echo "  cp -r ~/openclaw-${USER_PROFILE}-$TIMESTAMP/openclaw-config ~/.openclaw"

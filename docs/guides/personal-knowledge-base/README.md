@@ -15,6 +15,48 @@ Build a voice-powered memory system using OpenClaw, mlx-audio (VibeVoice), Lume 
 
 ---
 
+## Multi-User Setup
+
+The system supports multiple users on the same Mac host and VM through per-user directory structures. Each user has their own:
+- Telegram bot and agent
+- Media inbound folder
+- Transcripts directory
+- Workspace
+- Configuration
+- Memory database (automatically isolated per agent)
+
+**Directory structure:**
+```
+~/openclaw/
+├── xin/                        # User 1's data
+│   ├── media/inbound/
+│   ├── transcripts/
+│   ├── workspace/
+│   └── config/
+├── wife/                       # User 2's data
+│   ├── media/inbound/
+│   ├── transcripts/
+│   ├── workspace/
+│   └── config/
+└── scripts/                    # Shared scripts
+    ├── .venv/
+    ├── transcribe.sh
+    └── transcript-watcher.sh
+```
+
+**Key points:**
+- All scripts use `USER_PROFILE` environment variable (default: `xin`)
+- VM runs two separate OpenClaw instances with different `OPENCLAW_STATE_DIR` values
+- Each instance has its own gateway port (18789 for user 1, 18790 for user 2)
+- No data cross-contamination between users
+- Google Drive and NAS paths also use per-user subdirectories
+
+**For single-user setup:** Follow the guide as written. The default `USER_PROFILE=xin` is used throughout.
+
+**For multi-user setup:** See the end of this guide for additional configuration steps, or set `USER_PROFILE` when running scripts (e.g., `USER_PROFILE=wife ~/openclaw/scripts/transcribe.sh`).
+
+---
+
 ## Architecture Overview
 
 ```
@@ -198,24 +240,30 @@ chmod +x ~/openclaw/scripts/transcribe.sh
 ### 1.4 Create Directories
 
 ```bash
-# Unified shared folder structure
-mkdir -p ~/openclaw/media/recordings
-mkdir -p ~/openclaw/workspace
-mkdir -p ~/openclaw/transcripts
+# Set user profile (default: xin)
+USER_PROFILE="${USER_PROFILE:-xin}"
+
+# Unified shared folder structure (per-user)
+mkdir -p ~/openclaw/${USER_PROFILE}/media/inbound
+mkdir -p ~/openclaw/${USER_PROFILE}/workspace
+mkdir -p ~/openclaw/${USER_PROFILE}/transcripts
+mkdir -p ~/openclaw/${USER_PROFILE}/config
 mkdir -p ~/openclaw/scripts
 
-# Google Drive destinations (cloud backup)
-mkdir -p ~/Insync/bac2qh@gmail.com/Google\ Drive/openclaw/workspace
-mkdir -p ~/Insync/bac2qh@gmail.com/Google\ Drive/openclaw/transcripts
+# Google Drive destinations (cloud backup, per-user)
+mkdir -p ~/Insync/bac2qh@gmail.com/Google\ Drive/openclaw/${USER_PROFILE}/workspace
+mkdir -p ~/Insync/bac2qh@gmail.com/Google\ Drive/openclaw/${USER_PROFILE}/transcripts
 
-# NAS (archival - audio only)
-mkdir -p /Volumes/NAS_1/Xin/openclaw/media/recordings
+# NAS (archival - audio only, per-user)
+mkdir -p /Volumes/NAS_1/${USER_PROFILE}/openclaw/media/recordings
 ```
 
 **Note:** Adjust paths based on your setup:
+- `USER_PROFILE` environment variable determines the user-specific subdirectory (default: `xin`)
 - Google Drive path depends on your sync location (for cloud backup via rsync)
 - NAS path depends on your mount point (audio files are moved here after transcription)
 - The `~/openclaw/` folder is shared with the VM via VirtioFS
+- For multi-user setup: use different `USER_PROFILE` values (e.g., `xin`, `wife`)
 
 ### 1.5 Configure Hotwords (Optional)
 
@@ -271,21 +319,24 @@ For more details, see [transcribe-flow.md](./transcribe-flow.md#hotwords-configu
 ### 1.6 Test the Transcription Pipeline
 
 ```bash
+# Set user profile (default: xin)
+USER_PROFILE="${USER_PROFILE:-xin}"
+
 # Create test recording (script auto-converts to MP3 for transcription)
-say "Hello, this is a test of the transcription system." -o ~/openclaw/media/recordings/test.aiff
+say "Hello, this is a test of the transcription system." -o ~/openclaw/${USER_PROFILE}/media/inbound/test.aiff
 
 # Run transcription (auto-converts aiff → mp3, then transcribes)
-~/openclaw/scripts/transcribe.sh
+USER_PROFILE=${USER_PROFILE} ~/openclaw/scripts/transcribe.sh
 
 # Check transcript output (local first, then synced to cloud)
-ls ~/openclaw/transcripts/
-cat ~/openclaw/transcripts/*test*.json
+ls ~/openclaw/${USER_PROFILE}/transcripts/
+cat ~/openclaw/${USER_PROFILE}/transcripts/*test*.json
 
 # Check transcript was synced to Google Drive
-ls ~/Insync/bac2qh@gmail.com/Google\ Drive/openclaw/transcripts/
+ls ~/Insync/bac2qh@gmail.com/Google\ Drive/openclaw/${USER_PROFILE}/transcripts/
 
 # Check audio was moved to NAS
-ls /Volumes/NAS_1/Xin/openclaw/media/recordings/
+ls /Volumes/NAS_1/${USER_PROFILE}/openclaw/media/recordings/
 ```
 
 **Expected output:**
@@ -295,47 +346,42 @@ ls /Volumes/NAS_1/Xin/openclaw/media/recordings/
 
 ### 1.7 Auto-Transcribe with launchd
 
-Create `~/Library/LaunchAgents/com.user.transcribe.plist`:
-
-```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>Label</key>
-    <string>com.user.transcribe</string>
-    <key>ProgramArguments</key>
-    <array>
-        <string>/bin/bash</string>
-        <string>/Users/YOUR_USERNAME/openclaw/scripts/transcribe.sh</string>
-    </array>
-    <key>WatchPaths</key>
-    <array>
-        <string>/Users/YOUR_USERNAME/openclaw/media/recordings</string>
-    </array>
-    <key>EnvironmentVariables</key>
-    <dict>
-        <key>PATH</key>
-        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
-    </dict>
-    <key>StandardOutPath</key>
-    <string>/tmp/transcribe.log</string>
-    <key>StandardErrorPath</key>
-    <string>/tmp/transcribe.err</string>
-</dict>
-</plist>
-```
-
-Replace `YOUR_USERNAME`, then load:
+For single-user setup, copy the pre-configured plist:
 
 ```bash
-launchctl load ~/Library/LaunchAgents/com.user.transcribe.plist
+# Copy the plist for your user profile (default: xin)
+cp scripts/knowledge-base/com.user.transcribe-xin.plist ~/Library/LaunchAgents/
 
-# Test: drop a file in ~/openclaw/media/recordings and check logs
-tail -f /tmp/transcribe.log
+# IMPORTANT: Edit the file to update YOUR_USERNAME to your actual macOS username
+nano ~/Library/LaunchAgents/com.user.transcribe-xin.plist
+
+# Load the plist
+launchctl load ~/Library/LaunchAgents/com.user.transcribe-xin.plist
+
+# Test: drop a file in ~/openclaw/xin/media/inbound and check logs
+tail -f /tmp/transcribe-xin.log
 ```
 
-**Note:** Audio files are automatically moved to NAS and transcripts saved to Google Drive after successful transcription.
+**For multi-user setup:** Load both plists:
+
+```bash
+# User 1 (xin)
+cp scripts/knowledge-base/com.user.transcribe-xin.plist ~/Library/LaunchAgents/
+launchctl load ~/Library/LaunchAgents/com.user.transcribe-xin.plist
+
+# User 2 (wife)
+cp scripts/knowledge-base/com.user.transcribe-wife.plist ~/Library/LaunchAgents/
+launchctl load ~/Library/LaunchAgents/com.user.transcribe-wife.plist
+
+# Check both are running
+launchctl list | grep transcribe
+```
+
+**Note:**
+- Each plist watches a different directory (`~/openclaw/xin/media/inbound` vs `~/openclaw/wife/media/inbound`)
+- Each plist sets the `USER_PROFILE` environment variable automatically
+- Audio files are automatically moved to NAS and transcripts saved to Google Drive after successful transcription
+- Logs are separated: `/tmp/transcribe-xin.log` and `/tmp/transcribe-wife.log`
 
 ---
 

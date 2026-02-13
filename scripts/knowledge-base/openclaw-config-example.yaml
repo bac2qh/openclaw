@@ -31,9 +31,9 @@ agents:
     memorySearch:
       enabled: true
       provider: "openai"  # For embeddings
-      # Additional paths to index
+      # Additional paths to index (user-specific)
       extraPaths:
-        - "/mnt/transcripts"
+        - "/Volumes/My Shared Files/{USER_PROFILE}/transcripts"
 
 # Channels
 channels:
@@ -47,9 +47,9 @@ channels:
 tools:
   media:
     # Note: downloadPath is NOT a valid config option.
-    # Media downloads to ~/.openclaw/media/inbound/ by default.
+    # Media downloads to ~/.openclaw/media/inbound/ by default (or $OPENCLAW_STATE_DIR/media/inbound/).
     # Use symlink workaround to redirect to shared folder:
-    #   ln -s "/Volumes/My Shared Files/media/recordings" ~/.openclaw/media/inbound
+    #   ln -s "/Volumes/My Shared Files/{USER_PROFILE}/media/inbound" ~/.openclaw/media/inbound
     # See docs/guides/personal-knowledge-base/telegram-audio-flow.md for details.
 
     audio:
@@ -82,4 +82,4 @@ cron:
 gateway:
   mode: "local"
   # bind: "loopback"  # Default: only local connections
-  # port: 18789      # Default port
+  # port: 18789      # Default port (use 18790 for second user, etc.)

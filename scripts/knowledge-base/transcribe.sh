@@ -1,18 +1,21 @@
 #!/bin/bash
 # Transcribe audio files with mlx-audio (VibeVoice-ASR)
 #
-# This script monitors ~/openclaw/media/inbound/ for new audio files and transcribes them
+# This script monitors ~/openclaw/{USER_PROFILE}/media/inbound/ for new audio files and transcribes them
 # using mlx-audio with Microsoft's VibeVoice-ASR model (includes speaker diarization).
-# Transcripts are saved to ~/openclaw/transcripts/ (shared with VM), then synced to Google Drive.
+# Transcripts are saved to ~/openclaw/{USER_PROFILE}/transcripts/ (shared with VM), then synced to Google Drive.
 # After successful transcription, audio files are moved to NAS for archival.
 #
 # Supported input formats: ogg, m4a (Telegram voice/audio messages)
 # Files are converted to MP3 before transcription (miniaudio compatibility).
 #
 # Usage:
-#   1. Drop audio files into ~/openclaw/media/inbound/
-#   2. Run manually: ~/openclaw/scripts/transcribe.sh
+#   1. Drop audio files into ~/openclaw/{USER_PROFILE}/media/inbound/
+#   2. Run manually: USER_PROFILE=xin ~/openclaw/scripts/transcribe.sh
 #   3. Or auto-run via launchd (see setup guide)
+#
+# Environment variables:
+#   USER_PROFILE - User profile name (default: xin)
 #
 # Requirements:
 #   - mlx-audio (pip install mlx-audio)
@@ -26,13 +29,24 @@ set -euo pipefail
 # Timestamp all stderr output (for launchd error log)
 exec 2> >(while IFS= read -r line; do printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$line"; done >&2)
 
+# User profile
+USER_PROFILE="${USER_PROFILE:-xin}"
+
+# Validate USER_PROFILE contains only safe characters
+if [[ ! "$USER_PROFILE" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+    echo "ERROR: USER_PROFILE must contain only alphanumeric characters, hyphens, and underscores" >&2
+    exit 1
+fi
+
+BASE_DIR="${HOME}/openclaw/${USER_PROFILE}"
+
 # Configuration
-PYTHON="${HOME}/openclaw/scripts/.venv/bin/python"
-INPUT_DIR="${HOME}/openclaw/media/inbound"
-OUTPUT_DIR="${HOME}/openclaw/transcripts"
-GDRIVE_TRANSCRIPTS="${HOME}/Insync/bac2qh@gmail.com/Google Drive/openclaw/transcripts"
-GDRIVE_WORKSPACE="${HOME}/Insync/bac2qh@gmail.com/Google Drive/openclaw/workspace"
-NAS_RECORDINGS="/Volumes/NAS_1/Xin/openclaw/media/recordings"
+PYTHON="${HOME}/openclaw/scripts/.venv/bin/python"   # shared
+INPUT_DIR="${BASE_DIR}/media/inbound"
+OUTPUT_DIR="${BASE_DIR}/transcripts"
+GDRIVE_TRANSCRIPTS="${HOME}/Insync/bac2qh@gmail.com/Google Drive/openclaw/${USER_PROFILE}/transcripts"
+GDRIVE_WORKSPACE="${HOME}/Insync/bac2qh@gmail.com/Google Drive/openclaw/${USER_PROFILE}/workspace"
+NAS_RECORDINGS="/Volumes/NAS_1/${USER_PROFILE}/openclaw/media/recordings"
 FAST_MODEL="mlx-community/whisper-large-v3-turbo-asr-fp16"
 FULL_MODEL="mlx-community/VibeVoice-ASR-bf16"
 MODEL_THRESHOLD=600  # Use FULL_MODEL if audio > 10 minutes (in seconds)
@@ -44,7 +58,7 @@ CHUNK_DURATION=3300  # 55 minutes per chunk (in seconds)
 CHUNK_STEP=3000      # Start next chunk at 50 minutes (5 min overlap)
 
 # Hotwords configuration (for VibeVoice-ASR context biasing)
-HOTWORDS_FILE="${HOME}/openclaw/config/hotwords.txt"
+HOTWORDS_FILE="${BASE_DIR}/config/hotwords.txt"
 
 # Ensure directories exist
 mkdir -p "$INPUT_DIR" "$OUTPUT_DIR"
@@ -59,11 +73,12 @@ log_err() {
 }
 
 # Helper function: Read hotwords from config file (comma-separated, one term per line)
+# Filters out comments (lines starting with #) and blank lines
 get_hotwords_context() {
     local file="$1"
     if [[ -f "$file" ]]; then
         local context
-        context=$(tr '\n' ',' < "$file" | sed 's/,$//' | sed 's/,,*/,/g' | xargs)
+        context=$(grep -v '^\s*#' "$file" | grep -v '^\s*$' | tr '\n' ',' | sed 's/,$//' | sed 's/,,*/,/g' | xargs)
         if [[ -n "$context" ]]; then
             echo "$context"
         fi
@@ -280,16 +295,16 @@ if [ -d "$GDRIVE_TRANSCRIPTS" ] && [ -d "$GDRIVE_WORKSPACE" ]; then
     echo ""
     log "Syncing to Google Drive..."
 
-    # Sync transcripts
-    if rsync -av --delete "$OUTPUT_DIR/" "$GDRIVE_TRANSCRIPTS/"; then
+    # Sync transcripts (with safety limit on deletions)
+    if rsync -av --delete --max-delete=10 "$OUTPUT_DIR/" "$GDRIVE_TRANSCRIPTS/"; then
         log "  ✓ Transcripts synced to Google Drive"
     else
         log_err "  ⚠ Warning: Failed to sync transcripts to Google Drive"
     fi
 
-    # Sync workspace (if it exists)
-    if [ -d "${HOME}/openclaw/workspace" ]; then
-        if rsync -av --delete "${HOME}/openclaw/workspace/" "$GDRIVE_WORKSPACE/"; then
+    # Sync workspace (if it exists, with safety limit on deletions)
+    if [ -d "${BASE_DIR}/workspace" ]; then
+        if rsync -av --delete --max-delete=10 "${BASE_DIR}/workspace/" "$GDRIVE_WORKSPACE/"; then
             log "  ✓ Workspace synced to Google Drive"
         else
             log_err "  ⚠ Warning: Failed to sync workspace to Google Drive"
