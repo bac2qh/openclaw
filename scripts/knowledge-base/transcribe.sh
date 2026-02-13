@@ -23,6 +23,9 @@
 
 set -euo pipefail
 
+# Timestamp all stderr output (for launchd error log)
+exec 2> >(while IFS= read -r line; do printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$line"; done >&2)
+
 # Configuration
 PYTHON="${HOME}/openclaw/scripts/.venv/bin/python"
 INPUT_DIR="${HOME}/openclaw/media/inbound"
@@ -49,7 +52,7 @@ log() {
 }
 
 log_err() {
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: $*" >&2
+    echo "ERROR: $*" >&2
 }
 
 # Helper function: Get audio duration in seconds using ffprobe
