@@ -41,6 +41,10 @@ echo "Creating directories..."
 echo "  Creating local recordings folder..."
 mkdir -p ~/openclaw/media/recordings
 
+# Configuration directory
+echo "  Creating config folder..."
+mkdir -p ~/openclaw/config
+
 # Google Drive (synced to cloud) - workspace + transcripts
 echo "  Creating Google Drive folders..."
 mkdir -p ~/Insync/bac2qh@gmail.com/Google\ Drive/openclaw/workspace

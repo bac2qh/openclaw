@@ -1,0 +1,35 @@
+# Hotwords Configuration for VibeVoice-ASR
+#
+# This file provides domain-specific terms (hotwords) to bias transcription accuracy.
+# The VibeVoice-ASR model uses these terms to improve recognition of proper nouns,
+# technical terms, and project-specific vocabulary.
+#
+# Format:
+#   - One term per line
+#   - Blank lines and comments (lines starting with #) are ignored
+#   - Multi-word terms are supported (e.g., "Apple Silicon")
+#   - Terms are case-sensitive
+#
+# Usage:
+#   1. Copy this file to ~/openclaw/config/hotwords.txt
+#   2. Edit the file to include your domain-specific terms
+#   3. The transcribe.sh script will automatically use these terms
+#
+# Agent-driven updates (via Telegram):
+#   - VM path: /Volumes/My Shared Files/config/hotwords.txt
+#   - Host path: ~/openclaw/config/hotwords.txt (same file via shared folder)
+#   - Tell agent: "update hotwords: Alice, Bob, ProjectX"
+#   - Agent writes to the file, changes take effect on next transcription
+#
+# Example terms:
+
+OpenClaw
+VibeVoice
+MLX
+Apple Silicon
+Anthropic
+Claude
+Sonnet
+Telegram
+VirtioFS
+Lume

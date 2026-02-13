@@ -217,7 +217,58 @@ mkdir -p /Volumes/NAS_1/Xin/openclaw/media/recordings
 - NAS path depends on your mount point (audio files are moved here after transcription)
 - The `~/openclaw/` folder is shared with the VM via VirtioFS
 
-### 1.5 Test the Transcription Pipeline
+### 1.5 Configure Hotwords (Optional)
+
+Hotwords are domain-specific terms that improve transcription accuracy for proper nouns, technical terms, and project-specific vocabulary. They are used only with VibeVoice-ASR (recordings > 10 minutes).
+
+**Create the hotwords file:**
+
+```bash
+# Copy the example file
+cp scripts/knowledge-base/hotwords-example.txt ~/openclaw/config/hotwords.txt
+
+# Edit to add your terms (one per line)
+nano ~/openclaw/config/hotwords.txt
+```
+
+**Example hotwords file:**
+
+```
+OpenClaw
+VibeVoice
+MLX
+Apple Silicon
+Claude Sonnet
+```
+
+**Agent-driven updates:**
+
+Before a meeting, ask your Telegram agent to update the hotwords:
+
+```
+"Update hotwords for my next meeting: Alice, Bob, ProjectX"
+```
+
+The agent writes to `/Volumes/My Shared Files/config/hotwords.txt` (VM path), which is the same file as `~/openclaw/config/hotwords.txt` (host path) via the shared folder. Changes take effect immediately on the next transcription.
+
+**Path mapping:**
+
+| Side | Path | Notes |
+|------|------|-------|
+| **Host Mac** | `~/openclaw/config/hotwords.txt` | Read by `transcribe.sh` |
+| **VM** | `/Volumes/My Shared Files/config/hotwords.txt` | Written by agent |
+
+Same file, bidirectional via VirtioFS.
+
+**When are hotwords used?**
+
+- ✅ VibeVoice-ASR (recordings > 10 minutes)
+- ❌ Whisper-turbo (recordings < 10 minutes)
+- If the file is missing or empty, transcription proceeds without context (backward compatible)
+
+For more details, see [transcribe-flow.md](./transcribe-flow.md#hotwords-configuration).
+
+### 1.6 Test the Transcription Pipeline
 
 ```bash
 # Create test recording (script auto-converts to MP3 for transcription)
@@ -242,7 +293,7 @@ ls /Volumes/NAS_1/Xin/openclaw/media/recordings/
 - Same transcript synced to Google Drive
 - Audio file moved to NAS at `/Volumes/NAS_1/Xin/openclaw/media/recordings/`
 
-### 1.6 Auto-Transcribe with launchd
+### 1.7 Auto-Transcribe with launchd
 
 Create `~/Library/LaunchAgents/com.user.transcribe.plist`:
 

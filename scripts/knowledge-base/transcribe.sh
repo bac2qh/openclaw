@@ -43,6 +43,9 @@ CHUNK_THRESHOLD=3300 # Split if audio > 55 minutes (in seconds)
 CHUNK_DURATION=3300  # 55 minutes per chunk (in seconds)
 CHUNK_STEP=3000      # Start next chunk at 50 minutes (5 min overlap)
 
+# Hotwords configuration (for VibeVoice-ASR context biasing)
+HOTWORDS_FILE="${HOME}/openclaw/config/hotwords.txt"
+
 # Ensure directories exist
 mkdir -p "$INPUT_DIR" "$OUTPUT_DIR"
 
@@ -53,6 +56,18 @@ log() {
 
 log_err() {
     echo "ERROR: $*" >&2
+}
+
+# Helper function: Read hotwords from config file (comma-separated, one term per line)
+get_hotwords_context() {
+    local file="$1"
+    if [[ -f "$file" ]]; then
+        local context
+        context=$(tr '\n' ',' < "$file" | sed 's/,$//' | sed 's/,,*/,/g' | xargs)
+        if [[ -n "$context" ]]; then
+            echo "$context"
+        fi
+    fi
 }
 
 # Helper function: Get audio duration in seconds using ffprobe
@@ -153,6 +168,16 @@ for audio_file in "$INPUT_DIR"/*.ogg "$INPUT_DIR"/*.m4a; do
         log "  Model: whisper-turbo (short recording)"
     fi
 
+    # Load hotwords context for VibeVoice-ASR model
+    context_args=()
+    if [[ "$selected_model" == "$FULL_MODEL" ]]; then
+        hotwords=$(get_hotwords_context "$HOTWORDS_FILE")
+        if [[ -n "$hotwords" ]]; then
+            context_args=(--context "$hotwords")
+            log "  Context: $hotwords"
+        fi
+    fi
+
     # Check if audio needs to be split into chunks
     if [[ "$duration" -gt "$CHUNK_THRESHOLD" ]]; then
         log "  Audio is longer than 55 minutes, splitting into chunks..."
@@ -179,7 +204,8 @@ for audio_file in "$INPUT_DIR"/*.ogg "$INPUT_DIR"/*.m4a; do
                 --audio "$chunk_file" \
                 --output-path "${chunk_output}" \
                 --format json \
-                --max-tokens "$MAX_TOKENS"; then
+                --max-tokens "$MAX_TOKENS" \
+                "${context_args[@]}"; then
                 log "    ✓ Chunk transcription saved: ${chunk_output}.json"
                 chunk_files+=("$chunk_file")
             else
@@ -221,7 +247,8 @@ for audio_file in "$INPUT_DIR"/*.ogg "$INPUT_DIR"/*.m4a; do
             --audio "$mp3_file" \
             --output-path "${output_base}" \
             --format json \
-            --max-tokens "$MAX_TOKENS"; then
+            --max-tokens "$MAX_TOKENS" \
+            "${context_args[@]}"; then
             log "  ✓ Transcription saved: ${output_base}.json"
 
             # Move audio files to NAS after successful transcription
