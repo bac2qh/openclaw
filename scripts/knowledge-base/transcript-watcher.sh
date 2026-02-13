@@ -50,6 +50,19 @@ while true; do
 
     CONTENT=$(cat "$file")
 
+    # Detect multi-part transcript from filename pattern: {timestamp}-{name}_partN.json
+    PART_META=""
+    if [[ "$basename" =~ _part([0-9]+)\.json$ ]]; then
+      PART_NUM="${BASH_REMATCH[1]}"
+      BASE_NAME="${basename%_part*.json}"
+      PART_COUNT=0
+      for f in "$TRANSCRIPTS_DIR"/${BASE_NAME}_part*.json "$PROCESSED_DIR"/${BASE_NAME}_part*.json; do
+        [[ -f "$f" ]] && ((PART_COUNT++))
+      done
+      PART_META="
+**Multi-part recording:** This is part ${PART_NUM} of ${PART_COUNT} (so far) from recording '${BASE_NAME}'. Adjacent parts overlap by ~5 minutes — avoid storing duplicate content from overlap regions. If this is part 2+, treat it as a continuation of the same recording."
+    fi
+
     # Extract duration from transcript JSON (last segment's end_time)
     DURATION_SECS=$(echo "$CONTENT" | node -e "
       let buf = '';
@@ -90,7 +103,7 @@ $CONTENT" \
         --message "Process this voice transcript JSON. Determine from the content and metadata whether this is a quick voice memo, a note, or a multi-person meeting, then process accordingly:
 - **Voice memo/note**: Store the key facts in memory. Keep it brief.
 - **Meeting**: Summarize key discussion points (3-5 bullets), extract action items with owners, identify decisions made, and update memory.
-
+${PART_META}
 Transcript JSON:
 $CONTENT" \
         --thinking medium \
