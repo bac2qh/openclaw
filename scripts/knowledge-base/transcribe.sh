@@ -220,7 +220,7 @@ for audio_file in "$INPUT_DIR"/*.ogg "$INPUT_DIR"/*.m4a; do
                 --output-path "${chunk_output}" \
                 --format json \
                 --max-tokens "$MAX_TOKENS" \
-                "${context_args[@]}"; then
+                ${context_args[@]+"${context_args[@]}"}; then
                 log "    ✓ Chunk transcription saved: ${chunk_output}.json"
                 chunk_files+=("$chunk_file")
             else
@@ -263,7 +263,7 @@ for audio_file in "$INPUT_DIR"/*.ogg "$INPUT_DIR"/*.m4a; do
             --output-path "${output_base}" \
             --format json \
             --max-tokens "$MAX_TOKENS" \
-            "${context_args[@]}"; then
+            ${context_args[@]+"${context_args[@]}"}; then
             log "  ✓ Transcription saved: ${output_base}.json"
 
             # Move audio files to NAS after successful transcription
