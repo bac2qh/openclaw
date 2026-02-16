@@ -20,8 +20,8 @@
 #
 # Usage:
 #   1. Drop audio files into ~/openclaw/xin/media/inbound/
-#   2. Run manually: ~/openclaw/scripts/knowledge-base/xin/transcribe.sh
-#   3. Or auto-run via launchd (see setup guide)
+#   2. Run as daemon in tmux: tmux new-session -d -s transcribe-xin '~/openclaw/scripts/knowledge-base/xin/transcribe.sh'
+#   3. Polls for new files every 10 seconds when idle
 #
 # Environment variables:
 #   REMOTE_ENABLED - Enable remote GPU transcription (default: true)
@@ -37,6 +37,8 @@
 #   - NAS mounted at /Volumes/NAS_1 (required for remote GPU transcription)
 
 set -euo pipefail
+
+trap 'log "Shutting down..."; exit 0' SIGTERM SIGINT
 
 # Timestamp all stderr output (for launchd error log)
 exec 2> >(while IFS= read -r line; do printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$line"; done >&2)
@@ -82,6 +84,8 @@ NAS_REMOTE_BASE="${NAS_REMOTE_BASE:-/mnt/nas}"            # Ubuntu mount point
 # Docker config
 REMOTE_DOCKER_IMAGE="${REMOTE_DOCKER_IMAGE:-vibevoice-asr:latest}"
 REMOTE_SUSPEND_AFTER="${REMOTE_SUSPEND_AFTER:-true}"
+
+POLL_INTERVAL=10  # seconds between checks when idle
 
 # Ensure directories exist
 mkdir -p "$INPUT_DIR" "$OUTPUT_DIR"
@@ -291,345 +295,360 @@ if [[ "$REMOTE_ENABLED" == "true" ]]; then
     fi
 fi
 
-# Process each audio file (any format ffmpeg supports)
-shopt -s nullglob
-for audio_file in "$INPUT_DIR"/*.ogg "$INPUT_DIR"/*.m4a; do
-    # Skip if no files match
-    [ -e "$audio_file" ] || continue
+log "Transcribe daemon started (polling every ${POLL_INTERVAL}s)"
 
-    filename=$(basename "$audio_file")
-    basename_no_ext="${filename%.*}"
-    extension="${filename##*.}"
-    timestamp=$(date +%Y-%m-%d-%H%M)
-    output_base="$OUTPUT_DIR/${timestamp}-${basename_no_ext}"
+# Process audio files in an infinite poll loop
+while true; do
+    shopt -s nullglob
+    audio_files=("$INPUT_DIR"/*.ogg "$INPUT_DIR"/*.m4a)
 
-    log "Processing: $filename"
-
-    # Get audio duration from original file (ffprobe handles m4a/ogg natively)
-    duration=$(get_audio_duration "$audio_file")
-    if [[ -z "$duration" || "$duration" -eq 0 ]]; then
-        log_err "  Could not determine audio duration"
+    if [[ ${#audio_files[@]} -eq 0 ]]; then
+        sleep "$POLL_INTERVAL"
         continue
     fi
 
-    duration_min=$((duration / 60))
-    log "  Duration: ${duration_min} minutes (${duration}s)"
+    log "Found ${#audio_files[@]} file(s) to process"
 
-    # Select model based on duration
-    if [[ "$duration" -gt "$MODEL_THRESHOLD" ]]; then
-        selected_model="$FULL_MODEL"
-        log "  Model: VibeVoice-ASR (long recording)"
-    else
-        selected_model="$FAST_MODEL"
-        log "  Model: whisper-turbo (short recording)"
-    fi
+    for audio_file in "${audio_files[@]}"; do
+        # Skip if no files match
+        [ -e "$audio_file" ] || continue
 
-    # Load hotwords context for VibeVoice-ASR model
-    context_args=()
-    if [[ "$selected_model" == "$FULL_MODEL" ]]; then
-        hotwords=$(get_hotwords_context "$HOTWORDS_FILE")
-        if [[ -n "$hotwords" ]]; then
-            context_args=(--context "$hotwords")
-            log "  Context: $hotwords"
-        fi
-    fi
+        filename=$(basename "$audio_file")
+        basename_no_ext="${filename%.*}"
+        extension="${filename##*.}"
+        timestamp=$(date +%Y-%m-%d-%H%M)
+        output_base="$OUTPUT_DIR/${timestamp}-${basename_no_ext}"
 
-    # Branch on duration: short files need MP3 conversion, long files skip it
-    if [[ "$duration" -le "$MODEL_THRESHOLD" ]]; then
-        # Short audio (<= 10 min): Convert to MP3 and transcribe with whisper-turbo
-        log "  Converting to MP3 for whisper-turbo..."
-        mp3_file="$INPUT_DIR/${basename_no_ext}.mp3"
-        if ffmpeg -y -i "$audio_file" -q:a 2 "$mp3_file" -loglevel warning; then
-            log "  ✓ Converted: ${basename_no_ext}.mp3"
-        else
-            log_err "  Conversion failed"
+        log "Processing: $filename"
+
+        # Get audio duration from original file (ffprobe handles m4a/ogg natively)
+        duration=$(get_audio_duration "$audio_file")
+        if [[ -z "$duration" || "$duration" -eq 0 ]]; then
+            log_err "  Could not determine audio duration"
             continue
         fi
 
-        log "  Transcribing with ${selected_model##*/}..."
-        if "$PYTHON" -m mlx_audio.stt.generate \
-            --model "$selected_model" \
-            --audio "$mp3_file" \
-            --output-path "${output_base}" \
-            --format json \
-            --max-tokens "$MAX_TOKENS" \
-            ${context_args[@]+"${context_args[@]}"}; then
-            log "  ✓ Transcription saved: ${output_base}.json"
+        duration_min=$((duration / 60))
+        log "  Duration: ${duration_min} minutes (${duration}s)"
 
-            # Move audio files to NAS after successful transcription
-            if [ -d "$NAS_RECORDINGS" ]; then
-                mv "$audio_file" "$NAS_RECORDINGS/"
-                log "  ✓ Moved to NAS: $filename"
-                # Remove the converted MP3 (only needed for transcription)
-                rm -f "$mp3_file"
-                log "  ✓ Removed converted MP3: ${basename_no_ext}.mp3"
-            else
-                log "  ⚠ NAS not mounted, keeping files locally"
-            fi
+        # Select model based on duration
+        if [[ "$duration" -gt "$MODEL_THRESHOLD" ]]; then
+            selected_model="$FULL_MODEL"
+            log "  Model: VibeVoice-ASR (long recording)"
         else
-            log_err "  Transcription failed"
-            continue
+            selected_model="$FAST_MODEL"
+            log "  Model: whisper-turbo (short recording)"
         fi
-    else
-        # Long audio (> 10 min): Use remote GPU or local fallback
-        if [[ "$REMOTE_ENABLED" == "true" ]]; then
-            # Remote GPU transcription path
-            log "  Using remote GPU transcription..."
 
-            # Wake remote GPU box
-            log "  Waking remote GPU box..."
-            if ! send_wol "$REMOTE_MAC_ADDR"; then
-                log_err "  Failed to send WOL packet"
-                continue
+        # Load hotwords context for VibeVoice-ASR model
+        context_args=()
+        if [[ "$selected_model" == "$FULL_MODEL" ]]; then
+            hotwords=$(get_hotwords_context "$HOTWORDS_FILE")
+            if [[ -n "$hotwords" ]]; then
+                context_args=(--context "$hotwords")
+                log "  Context: $hotwords"
             fi
+        fi
 
-            log "  Waiting for SSH (timeout: ${REMOTE_BOOT_TIMEOUT}s)..."
-            if ! wait_for_ssh "$REMOTE_HOST" "$REMOTE_SSH_PORT" "$REMOTE_BOOT_TIMEOUT" "$REMOTE_BOOT_POLL_INTERVAL"; then
-                log_err "  Remote host not reachable after WOL"
-                continue
-            fi
-            log "  ✓ Remote host is up"
-
-            # Branch on duration: chunked vs. medium
-            if [[ "$duration" -gt "$CHUNK_THRESHOLD" ]]; then
-                # Very long audio (> 30 min): Split into chunks and transcribe remotely
-                log "  Audio is longer than 30 minutes, splitting into chunks..."
-
-                # Split audio into MP3 chunks locally
-                chunk_base="$INPUT_DIR/${basename_no_ext}"
-                chunks=$(split_audio_into_chunks "$audio_file" "$chunk_base" "$duration")
-
-                if [[ -z "$chunks" ]]; then
-                    log_err "  Failed to create chunks"
-                    continue
-                fi
-
-                # Stage and transcribe each chunk remotely
-                transcription_failed=false
-                chunk_files=()
-                staged_chunks=()
-
-                for chunk_file in $chunks; do
-                    chunk_filename=$(basename "$chunk_file")
-                    chunk_basename=$(basename "$chunk_file" .mp3)
-                    chunk_output_base="${timestamp}-${basename_no_ext}_${chunk_basename##*_}"
-
-                    log "  Staging chunk: $chunk_filename..."
-                    staged_chunk=$(stage_audio_to_nas "$chunk_file")
-                    if [[ -z "$staged_chunk" ]]; then
-                        log_err "  Failed to stage chunk"
-                        transcription_failed=true
-                        break
-                    fi
-                    staged_chunks+=("$staged_chunk")
-
-                    log "  Transcribing chunk remotely: $chunk_filename..."
-                    hotwords=$(get_hotwords_context "$HOTWORDS_FILE")
-                    if ! run_remote_transcription "$chunk_filename" "$chunk_output_base" "$hotwords"; then
-                        log_err "  Remote transcription failed for chunk"
-                        transcription_failed=true
-                        break
-                    fi
-
-                    log "  Collecting transcript: $chunk_output_base..."
-                    if ! collect_remote_transcript "$chunk_output_base"; then
-                        log_err "  Failed to collect transcript"
-                        transcription_failed=true
-                        break
-                    fi
-
-                    log "    ✓ Chunk transcription complete: ${chunk_output_base}.json"
-                    chunk_files+=("$chunk_file")
-                done
-
-                # Clean up
-                if [[ "$transcription_failed" == false ]]; then
-                    log "  ✓ All chunks transcribed successfully"
-
-                    # Remove local chunks
-                    for chunk_file in "${chunk_files[@]}"; do
-                        rm -f "$chunk_file"
-                        log "  ✓ Removed local chunk: $(basename "$chunk_file")"
-                    done
-
-                    # Remove staged chunks from NAS
-                    for staged_chunk in "${staged_chunks[@]}"; do
-                        rm -f "$staged_chunk"
-                        log "  ✓ Removed staged chunk: $(basename "$staged_chunk")"
-                    done
-
-                    # Archive original to NAS
-                    if [ -d "$NAS_RECORDINGS" ]; then
-                        mv "$audio_file" "$NAS_RECORDINGS/"
-                        log "  ✓ Moved original to NAS: $filename"
-                    else
-                        log "  ⚠ NAS recordings directory not available"
-                    fi
-                else
-                    log_err "  Some chunks failed, cleaning up and keeping original"
-                    # Clean up local chunks
-                    for chunk_file in "${chunk_files[@]}"; do
-                        rm -f "$chunk_file"
-                    done
-                    # Clean up staged chunks
-                    for staged_chunk in "${staged_chunks[@]}"; do
-                        rm -f "$staged_chunk"
-                    done
-                    continue
-                fi
+        # Branch on duration: short files need MP3 conversion, long files skip it
+        if [[ "$duration" -le "$MODEL_THRESHOLD" ]]; then
+            # Short audio (<= 10 min): Convert to MP3 and transcribe with whisper-turbo
+            log "  Converting to MP3 for whisper-turbo..."
+            mp3_file="$INPUT_DIR/${basename_no_ext}.mp3"
+            if ffmpeg -y -i "$audio_file" -q:a 2 "$mp3_file" -loglevel warning; then
+                log "  ✓ Converted: ${basename_no_ext}.mp3"
             else
-                # Medium audio (10-30 min): Stage and transcribe single file remotely
-                log "  Staging audio to NAS..."
-                staged_path=$(stage_audio_to_nas "$audio_file")
-                if [[ -z "$staged_path" ]]; then
-                    log_err "  Failed to stage audio"
-                    continue
-                fi
-                log "  ✓ Staged: $(basename "$staged_path")"
+                log_err "  Conversion failed"
+                continue
+            fi
 
-                log "  Transcribing remotely..."
-                hotwords=$(get_hotwords_context "$HOTWORDS_FILE")
-                output_basename="${timestamp}-${basename_no_ext}"
-                if ! run_remote_transcription "$filename" "$output_basename" "$hotwords"; then
-                    log_err "  Remote transcription failed"
-                    rm -f "$staged_path"  # Clean up staged file
-                    continue
-                fi
+            log "  Transcribing with ${selected_model##*/}..."
+            if "$PYTHON" -m mlx_audio.stt.generate \
+                --model "$selected_model" \
+                --audio "$mp3_file" \
+                --output-path "${output_base}" \
+                --format json \
+                --max-tokens "$MAX_TOKENS" \
+                ${context_args[@]+"${context_args[@]}"}; then
+                log "  ✓ Transcription saved: ${output_base}.json"
 
-                log "  Collecting transcript..."
-                if ! collect_remote_transcript "$output_basename"; then
-                    log_err "  Failed to collect transcript"
-                    rm -f "$staged_path"  # Clean up staged file
-                    continue
-                fi
-                log "  ✓ Transcription saved: ${output_basename}.json"
-
-                # Archive original to NAS, clean up staging
+                # Move audio files to NAS after successful transcription
                 if [ -d "$NAS_RECORDINGS" ]; then
                     mv "$audio_file" "$NAS_RECORDINGS/"
                     log "  ✓ Moved to NAS: $filename"
+                    # Remove the converted MP3 (only needed for transcription)
+                    rm -f "$mp3_file"
+                    log "  ✓ Removed converted MP3: ${basename_no_ext}.mp3"
                 else
-                    log "  ⚠ NAS recordings directory not available"
+                    log "  ⚠ NAS not mounted, keeping files locally"
                 fi
-                rm -f "$staged_path"
-                log "  ✓ Removed staged file"
+            else
+                log_err "  Transcription failed"
+                continue
             fi
-
-            # Suspend remote host if configured
-            suspend_remote
-
         else
-            # REMOTE_ENABLED=false: Local fallback
-            log "  Remote GPU disabled, using local transcription..."
+            # Long audio (> 10 min): Use remote GPU or local fallback
+            if [[ "$REMOTE_ENABLED" == "true" ]]; then
+                # Remote GPU transcription path
+                log "  Using remote GPU transcription..."
 
-            if [[ "$duration" -gt "$CHUNK_THRESHOLD" ]]; then
-                # Very long audio (> 30 min): Split and transcribe locally
-                log "  Audio is longer than 30 minutes, splitting into chunks..."
-
-                chunk_base="$INPUT_DIR/${basename_no_ext}"
-                chunks=$(split_audio_into_chunks "$audio_file" "$chunk_base" "$duration")
-
-                if [[ -z "$chunks" ]]; then
-                    log_err "  Failed to create chunks"
+                # Wake remote GPU box
+                log "  Waking remote GPU box..."
+                if ! send_wol "$REMOTE_MAC_ADDR"; then
+                    log_err "  Failed to send WOL packet"
                     continue
                 fi
 
-                # Transcribe each chunk locally
-                transcription_failed=false
-                chunk_files=()
-                for chunk_file in $chunks; do
-                    chunk_basename=$(basename "$chunk_file" .mp3)
-                    chunk_output="${output_base}_${chunk_basename##*_}"
+                log "  Waiting for SSH (timeout: ${REMOTE_BOOT_TIMEOUT}s)..."
+                if ! wait_for_ssh "$REMOTE_HOST" "$REMOTE_SSH_PORT" "$REMOTE_BOOT_TIMEOUT" "$REMOTE_BOOT_POLL_INTERVAL"; then
+                    log_err "  Remote host not reachable after WOL"
+                    continue
+                fi
+                log "  ✓ Remote host is up"
 
-                    log "  Transcribing chunk: $(basename "$chunk_file")..."
+                # Branch on duration: chunked vs. medium
+                if [[ "$duration" -gt "$CHUNK_THRESHOLD" ]]; then
+                    # Very long audio (> 30 min): Split into chunks and transcribe remotely
+                    log "  Audio is longer than 30 minutes, splitting into chunks..."
+
+                    # Split audio into MP3 chunks locally
+                    chunk_base="$INPUT_DIR/${basename_no_ext}"
+                    chunks=$(split_audio_into_chunks "$audio_file" "$chunk_base" "$duration")
+
+                    if [[ -z "$chunks" ]]; then
+                        log_err "  Failed to create chunks"
+                        continue
+                    fi
+
+                    # Stage and transcribe each chunk remotely
+                    transcription_failed=false
+                    chunk_files=()
+                    staged_chunks=()
+
+                    for chunk_file in $chunks; do
+                        chunk_filename=$(basename "$chunk_file")
+                        chunk_basename=$(basename "$chunk_file" .mp3)
+                        chunk_output_base="${timestamp}-${basename_no_ext}_${chunk_basename##*_}"
+
+                        log "  Staging chunk: $chunk_filename..."
+                        staged_chunk=$(stage_audio_to_nas "$chunk_file")
+                        if [[ -z "$staged_chunk" ]]; then
+                            log_err "  Failed to stage chunk"
+                            transcription_failed=true
+                            break
+                        fi
+                        staged_chunks+=("$staged_chunk")
+
+                        log "  Transcribing chunk remotely: $chunk_filename..."
+                        hotwords=$(get_hotwords_context "$HOTWORDS_FILE")
+                        if ! run_remote_transcription "$chunk_filename" "$chunk_output_base" "$hotwords"; then
+                            log_err "  Remote transcription failed for chunk"
+                            transcription_failed=true
+                            break
+                        fi
+
+                        log "  Collecting transcript: $chunk_output_base..."
+                        if ! collect_remote_transcript "$chunk_output_base"; then
+                            log_err "  Failed to collect transcript"
+                            transcription_failed=true
+                            break
+                        fi
+
+                        log "    ✓ Chunk transcription complete: ${chunk_output_base}.json"
+                        chunk_files+=("$chunk_file")
+                    done
+
+                    # Clean up
+                    if [[ "$transcription_failed" == false ]]; then
+                        log "  ✓ All chunks transcribed successfully"
+
+                        # Remove local chunks
+                        for chunk_file in "${chunk_files[@]}"; do
+                            rm -f "$chunk_file"
+                            log "  ✓ Removed local chunk: $(basename "$chunk_file")"
+                        done
+
+                        # Remove staged chunks from NAS
+                        for staged_chunk in "${staged_chunks[@]}"; do
+                            rm -f "$staged_chunk"
+                            log "  ✓ Removed staged chunk: $(basename "$staged_chunk")"
+                        done
+
+                        # Archive original to NAS
+                        if [ -d "$NAS_RECORDINGS" ]; then
+                            mv "$audio_file" "$NAS_RECORDINGS/"
+                            log "  ✓ Moved original to NAS: $filename"
+                        else
+                            log "  ⚠ NAS recordings directory not available"
+                        fi
+                    else
+                        log_err "  Some chunks failed, cleaning up and keeping original"
+                        # Clean up local chunks
+                        for chunk_file in "${chunk_files[@]}"; do
+                            rm -f "$chunk_file"
+                        done
+                        # Clean up staged chunks
+                        for staged_chunk in "${staged_chunks[@]}"; do
+                            rm -f "$staged_chunk"
+                        done
+                        continue
+                    fi
+                else
+                    # Medium audio (10-30 min): Stage and transcribe single file remotely
+                    log "  Staging audio to NAS..."
+                    staged_path=$(stage_audio_to_nas "$audio_file")
+                    if [[ -z "$staged_path" ]]; then
+                        log_err "  Failed to stage audio"
+                        continue
+                    fi
+                    log "  ✓ Staged: $(basename "$staged_path")"
+
+                    log "  Transcribing remotely..."
+                    hotwords=$(get_hotwords_context "$HOTWORDS_FILE")
+                    output_basename="${timestamp}-${basename_no_ext}"
+                    if ! run_remote_transcription "$filename" "$output_basename" "$hotwords"; then
+                        log_err "  Remote transcription failed"
+                        rm -f "$staged_path"  # Clean up staged file
+                        continue
+                    fi
+
+                    log "  Collecting transcript..."
+                    if ! collect_remote_transcript "$output_basename"; then
+                        log_err "  Failed to collect transcript"
+                        rm -f "$staged_path"  # Clean up staged file
+                        continue
+                    fi
+                    log "  ✓ Transcription saved: ${output_basename}.json"
+
+                    # Archive original to NAS, clean up staging
+                    if [ -d "$NAS_RECORDINGS" ]; then
+                        mv "$audio_file" "$NAS_RECORDINGS/"
+                        log "  ✓ Moved to NAS: $filename"
+                    else
+                        log "  ⚠ NAS recordings directory not available"
+                    fi
+                    rm -f "$staged_path"
+                    log "  ✓ Removed staged file"
+                fi
+
+                # Suspend remote host if configured
+                suspend_remote
+
+            else
+                # REMOTE_ENABLED=false: Local fallback
+                log "  Remote GPU disabled, using local transcription..."
+
+                if [[ "$duration" -gt "$CHUNK_THRESHOLD" ]]; then
+                    # Very long audio (> 30 min): Split and transcribe locally
+                    log "  Audio is longer than 30 minutes, splitting into chunks..."
+
+                    chunk_base="$INPUT_DIR/${basename_no_ext}"
+                    chunks=$(split_audio_into_chunks "$audio_file" "$chunk_base" "$duration")
+
+                    if [[ -z "$chunks" ]]; then
+                        log_err "  Failed to create chunks"
+                        continue
+                    fi
+
+                    # Transcribe each chunk locally
+                    transcription_failed=false
+                    chunk_files=()
+                    for chunk_file in $chunks; do
+                        chunk_basename=$(basename "$chunk_file" .mp3)
+                        chunk_output="${output_base}_${chunk_basename##*_}"
+
+                        log "  Transcribing chunk: $(basename "$chunk_file")..."
+                        if "$PYTHON" -m mlx_audio.stt.generate \
+                            --model "$selected_model" \
+                            --audio "$chunk_file" \
+                            --output-path "${chunk_output}" \
+                            --format json \
+                            --max-tokens "$MAX_TOKENS" \
+                            ${context_args[@]+"${context_args[@]}"}; then
+                            log "    ✓ Chunk transcription saved: ${chunk_output}.json"
+                            chunk_files+=("$chunk_file")
+                        else
+                            log_err "    Chunk transcription failed"
+                            transcription_failed=true
+                            break
+                        fi
+                    done
+
+                    # Clean up chunk files if all transcriptions succeeded
+                    if [[ "$transcription_failed" == false ]]; then
+                        log "  ✓ All chunks transcribed successfully"
+                        for chunk_file in "${chunk_files[@]}"; do
+                            rm -f "$chunk_file"
+                            log "  ✓ Cleaned up: $(basename "$chunk_file")"
+                        done
+
+                        # Move original audio to NAS
+                        if [ -d "$NAS_RECORDINGS" ]; then
+                            mv "$audio_file" "$NAS_RECORDINGS/"
+                            log "  ✓ Moved to NAS: $filename"
+                        else
+                            log "  ⚠ NAS not mounted, keeping files locally"
+                        fi
+                    else
+                        log_err "  Some chunks failed to transcribe, keeping all files"
+                        continue
+                    fi
+                else
+                    # Medium audio (10-30 min): Transcribe locally
+                    log "  Transcribing original file with ${selected_model##*/} (no conversion)..."
                     if "$PYTHON" -m mlx_audio.stt.generate \
                         --model "$selected_model" \
-                        --audio "$chunk_file" \
-                        --output-path "${chunk_output}" \
+                        --audio "$audio_file" \
+                        --output-path "${output_base}" \
                         --format json \
                         --max-tokens "$MAX_TOKENS" \
                         ${context_args[@]+"${context_args[@]}"}; then
-                        log "    ✓ Chunk transcription saved: ${chunk_output}.json"
-                        chunk_files+=("$chunk_file")
-                    else
-                        log_err "    Chunk transcription failed"
-                        transcription_failed=true
-                        break
-                    fi
-                done
+                        log "  ✓ Transcription saved: ${output_base}.json"
 
-                # Clean up chunk files if all transcriptions succeeded
-                if [[ "$transcription_failed" == false ]]; then
-                    log "  ✓ All chunks transcribed successfully"
-                    for chunk_file in "${chunk_files[@]}"; do
-                        rm -f "$chunk_file"
-                        log "  ✓ Cleaned up: $(basename "$chunk_file")"
-                    done
-
-                    # Move original audio to NAS
-                    if [ -d "$NAS_RECORDINGS" ]; then
-                        mv "$audio_file" "$NAS_RECORDINGS/"
-                        log "  ✓ Moved to NAS: $filename"
+                        # Move audio file to NAS after successful transcription
+                        if [ -d "$NAS_RECORDINGS" ]; then
+                            mv "$audio_file" "$NAS_RECORDINGS/"
+                            log "  ✓ Moved to NAS: $filename"
+                        else
+                            log "  ⚠ NAS not mounted, keeping files locally"
+                        fi
                     else
-                        log "  ⚠ NAS not mounted, keeping files locally"
+                        log_err "  Transcription failed"
+                        continue
                     fi
-                else
-                    log_err "  Some chunks failed to transcribe, keeping all files"
-                    continue
-                fi
-            else
-                # Medium audio (10-30 min): Transcribe locally
-                log "  Transcribing original file with ${selected_model##*/} (no conversion)..."
-                if "$PYTHON" -m mlx_audio.stt.generate \
-                    --model "$selected_model" \
-                    --audio "$audio_file" \
-                    --output-path "${output_base}" \
-                    --format json \
-                    --max-tokens "$MAX_TOKENS" \
-                    ${context_args[@]+"${context_args[@]}"}; then
-                    log "  ✓ Transcription saved: ${output_base}.json"
-
-                    # Move audio file to NAS after successful transcription
-                    if [ -d "$NAS_RECORDINGS" ]; then
-                        mv "$audio_file" "$NAS_RECORDINGS/"
-                        log "  ✓ Moved to NAS: $filename"
-                    else
-                        log "  ⚠ NAS not mounted, keeping files locally"
-                    fi
-                else
-                    log_err "  Transcription failed"
-                    continue
                 fi
             fi
         fi
-    fi
 
-    log "  ✓ Done: $filename"
-    echo ""
-done
+        log "  ✓ Done: $filename"
+        echo ""
+    done
 
-log "Transcription batch complete."
+    log "Transcription batch complete."
 
-# Sync transcripts and workspace to Google Drive
-if [ -d "$GDRIVE_TRANSCRIPTS" ] && [ -d "$GDRIVE_WORKSPACE" ]; then
-    echo ""
-    log "Syncing to Google Drive..."
+    # Sync transcripts and workspace to Google Drive
+    if [ -d "$GDRIVE_TRANSCRIPTS" ] && [ -d "$GDRIVE_WORKSPACE" ]; then
+        echo ""
+        log "Syncing to Google Drive..."
 
-    # Sync transcripts (with safety limit on deletions)
-    if rsync -av --delete --max-delete=10 "$OUTPUT_DIR/" "$GDRIVE_TRANSCRIPTS/"; then
-        log "  ✓ Transcripts synced to Google Drive"
-    else
-        log_err "  ⚠ Warning: Failed to sync transcripts to Google Drive"
-    fi
-
-    # Sync workspace (if it exists, with safety limit on deletions)
-    if [ -d "${BASE_DIR}/workspace" ]; then
-        if rsync -av --delete --max-delete=10 "${BASE_DIR}/workspace/" "$GDRIVE_WORKSPACE/"; then
-            log "  ✓ Workspace synced to Google Drive"
+        # Sync transcripts (with safety limit on deletions)
+        if rsync -av --delete --max-delete=10 "$OUTPUT_DIR/" "$GDRIVE_TRANSCRIPTS/"; then
+            log "  ✓ Transcripts synced to Google Drive"
         else
-            log_err "  ⚠ Warning: Failed to sync workspace to Google Drive"
+            log_err "  ⚠ Warning: Failed to sync transcripts to Google Drive"
         fi
+
+        # Sync workspace (if it exists, with safety limit on deletions)
+        if [ -d "${BASE_DIR}/workspace" ]; then
+            if rsync -av --delete --max-delete=10 "${BASE_DIR}/workspace/" "$GDRIVE_WORKSPACE/"; then
+                log "  ✓ Workspace synced to Google Drive"
+            else
+                log_err "  ⚠ Warning: Failed to sync workspace to Google Drive"
+            fi
+        fi
+    else
+        log "  ⚠ Google Drive not available, skipping cloud sync"
     fi
-else
-    log "  ⚠ Google Drive not available, skipping cloud sync"
-fi
+
+    sleep 1  # Brief pause before re-checking for new files
+done
