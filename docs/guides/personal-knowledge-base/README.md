@@ -1,6 +1,6 @@
 # Personal Knowledge Base with OpenClaw
 
-Build a voice-powered memory system using OpenClaw, mlx-audio (VibeVoice), Lume VM, and Claude Sonnet 4.
+Build a voice-powered memory system using OpenClaw, mlx-audio (VibeVoice), Lume VM, and Kimi 2.5.
 
 ## Quick Start
 
@@ -11,19 +11,16 @@ Build a voice-powered memory system using OpenClaw, mlx-audio (VibeVoice), Lume 
 - Reminders: "Remind me tomorrow at 9am about the standup"
 
 **Total setup time:** ~30 minutes
-**Monthly cost:** ~$6 (Claude API only - transcription is 100% local)
+**Monthly cost:** ~$6 (LLM API only - transcription is 100% local)
 
 ---
 
 ## Multi-User Setup
 
-The system supports multiple users on the same Mac host and VM through per-user directory structures. Each user has their own:
+The system supports multiple users on the same Mac host and VM. Each user gets isolated:
 - Telegram bot and agent
-- Media inbound folder
-- Transcripts directory
-- Workspace
-- Configuration
-- Memory database (automatically isolated per agent)
+- Media inbound folder, transcripts, workspace, config
+- Memory database (per agent)
 
 **Directory structure:**
 ```
@@ -61,9 +58,66 @@ The system supports multiple users on the same Mac host and VM through per-user 
 - No data cross-contamination between users
 - Google Drive and NAS paths also use per-user subdirectories
 
-**For single-user setup:** Follow the guide as written, using the `xin/` script directory.
+**For single-user setup:** Follow the guide as written, using the `xin/` script directory. Skip the rest of this section.
 
-**For multi-user setup:** See the end of this guide for additional configuration steps. Each user has their own script copies in per-user directories (e.g., `~/openclaw/scripts/knowledge-base/xin/transcribe.sh` or `~/openclaw/scripts/knowledge-base/zhuoyue/transcribe.sh`).
+### Agent Routing (VM)
+
+Route Telegram messages to per-user agents using the `bindings` config. Each user's DMs go to a dedicated agent with an isolated workspace and memory database.
+
+```yaml
+# ~/.openclaw/config.yml
+bindings:
+  - agentId: "xin"
+    match:
+      channel: "telegram"
+      peer:
+        kind: "direct"
+        id: "123456789"        # Xin's Telegram chat ID
+  - agentId: "zhuoyue"
+    match:
+      channel: "telegram"
+      peer:
+        kind: "direct"
+        id: "987654321"        # Zhuoyue's Telegram chat ID
+
+session:
+  dmScope: "per-peer"          # Isolate conversation history per user
+```
+
+**CLI equivalent:**
+
+```bash
+openclaw config set bindings '[
+  {
+    "agentId": "xin",
+    "match": { "channel": "telegram", "peer": {"kind": "direct", "id": "123456789"} }
+  },
+  {
+    "agentId": "zhuoyue",
+    "match": { "channel": "telegram", "peer": {"kind": "direct", "id": "987654321"} }
+  }
+]'
+
+openclaw config set session.dmScope per-peer
+```
+
+Routing matches in order: peer ID (chat ID) → account ID → channel wildcard → default agent.
+
+### Separate Gateway Instances
+
+Each user runs their own OpenClaw gateway with isolated state:
+
+```bash
+# User 1 (xin) — port 18789
+OPENCLAW_STATE_DIR=~/.openclaw-xin \
+  nohup openclaw gateway run --bind loopback --port 18789 --force \
+  > /tmp/openclaw-gateway-xin.log 2>&1 &
+
+# User 2 (zhuoyue) — port 18790
+OPENCLAW_STATE_DIR=~/.openclaw-zhuoyue \
+  nohup openclaw gateway run --bind loopback --port 18790 --force \
+  > /tmp/openclaw-gateway-zhuoyue.log 2>&1 &
+```
 
 ---
 
@@ -99,7 +153,7 @@ The system supports multiple users on the same Mac host and VM through per-user 
 │  │ │ OpenClaw             │ │                                           │
 │  │ │ ├── Telegram Bot     │ │                                           │
 │  │ │ ├── Memory System    │ │                                           │
-│  │ │ └── Claude Sonnet 4  │ │                                           │
+│  │ │ └── Kimi 2.5         │ │                                           │
 │  │ └──────────────────────┘ │                                           │
 │  └──────────────────────────┘                                           │
 │                                                                          │
@@ -172,13 +226,10 @@ The system supports multiple users on the same Mac host and VM through per-user 
 2. [Lume VM Setup](#part-2-lume-vm-setup)
 3. [OpenClaw Setup (VM)](#part-3-openclaw-setup-vm)
 4. [Telegram Bot](#part-4-telegram-bot-setup)
-5. [Async Transcription Pipeline](#part-5-async-transcription-pipeline-2-watcher-setup)
-6. [Daily Workflow](#part-6-daily-workflow)
-7. [Cost Breakdown](#part-7-cost-summary)
-8. [Troubleshooting](#troubleshooting)
-9. [Audio Flow Details](./telegram-audio-flow.md) - Technical documentation of audio flows
-10. [Getting Claude API Access](#part-10-getting-claude-api-access)
-11. [LLM Provider Configuration](#part-11-llm-provider-configuration)
+5. [Async Transcription Pipeline](#part-5-async-transcription-pipeline)
+6. [Backup and Sync Strategy](#part-6-backup-and-sync-strategy)
+7. [Troubleshooting](#troubleshooting)
+8. [Audio Flow Details](./telegram-audio-flow.md) - Technical documentation of audio flows
 
 ---
 
@@ -526,11 +577,11 @@ For more details on gateway startup and configuration loading, see:
 # Initialize
 openclaw config init
 
-# Set Claude Sonnet 4
-openclaw config set agents.defaults.model "claude-sonnet-4-20250514"
+# Set Kimi 2.5
+openclaw config set agents.defaults.model "moonshot/kimi-2.5"
 
-# Set Anthropic API key
-openclaw config set providers.anthropic.apiKey "sk-ant-..."
+# Set Moonshot API key
+openclaw config set providers.moonshot.apiKey "sk-..."
 
 # Enable memory search
 openclaw config set agents.defaults.memorySearch.enabled true
@@ -713,7 +764,7 @@ Try voice:
 
 ---
 
-## Part 5: Async Transcription Pipeline (2-Watcher Setup)
+## Part 5: Async Transcription Pipeline
 
 ### 5.1 When to Use Async Pipeline
 
@@ -726,14 +777,14 @@ Use the async pipeline for **long recordings** that take hours to transcribe:
 
 For short voice messages (< 5 minutes), the standard sync flow works fine.
 
-### 5.2 Architecture: 2-Watcher Async Pipeline
+### 5.2 Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                      VM (OpenClaw)                          │
 │  Telegram → /Volumes/My Shared Files/media/recordings/ ─────┼──┐
 │                                                             │  │
-│  [Watcher 2] ← /Volumes/My Shared Files/transcripts/ ←──────┼──┼──┐
+│  [transcript-watcher] ← /Volumes/My Shared Files/transcripts/ ←──────┼──┼──┐
 │       ↓                                                     │  │  │
 │  openclaw agent --message (AI processes transcript)         │  │  │
 │       ↓                                                     │  │  │
@@ -758,7 +809,7 @@ For short voice messages (< 5 minutes), the standard sync flow works fine.
 1. **Telegram → VM:** Audio downloaded directly to shared folder `/Volumes/My Shared Files/media/recordings/`
 2. **mlx_audio (Host):** launchd watches `~/openclaw/media/recordings/`, transcribes with VibeVoice-ASR, saves to `~/openclaw/transcripts/`
 3. **Sync (Host):** After transcription, rsync syncs workspace + transcripts to Google Drive, moves audio to NAS
-4. **Watcher 2 (VM):** Picks up transcripts from `/Volumes/My Shared Files/transcripts/`, triggers AI processing via `openclaw agent --message` (summarizes, extracts action items, updates memory)
+4. **transcript-watcher (VM):** Picks up transcripts from `/Volumes/My Shared Files/transcripts/`, triggers AI processing via `openclaw agent --message` (summarizes, extracts action items, updates memory)
 
 ### 5.3 Setup: Disable Built-in Transcription
 
@@ -807,22 +858,6 @@ openclaw agents add transcript-processor --workspace ~/.openclaw/workspace
 
 ### 5.5 Running the Watchers
 
-**Note:** With the unified folder approach, Watcher 1 (audio copier) is optional - audio already lands in the shared folder. You only need Watcher 2 to send transcripts back to Telegram.
-
-**Optional: Monitor Audio (Inside VM)**
-
-```bash
-# SSH into VM
-lume ssh nix
-
-# Copy the watcher script (if not already done)
-# (Run this on host first: scp scripts/knowledge-base/audio-watcher.sh nix:~/)
-
-# Run the audio monitor (optional - just for logging)
-chmod +x ~/audio-watcher.sh
-~/audio-watcher.sh
-```
-
 **Terminal 1: Start Transcript Watcher - Inside VM**
 
 **Important:** This watcher uses `openclaw agent --message` to trigger **AI processing** of transcripts. It adapts based on transcript metadata (duration, speakers, word count) to intelligently handle voice memos (brief storage) vs. meetings (full summary + action items). Requires `agents.defaults.memorySearch.experimental.sessionMemory: true` for automatic indexing.
@@ -868,7 +903,7 @@ tmux kill-session -t transcript-watcher
 2. **Check audio lands in shared folder:** `ls ~/openclaw/media/recordings/` (on host)
 3. **Check host transcription:** `tail -f /tmp/transcribe.log` (if using launchd)
 4. **Check transcript appears:** `ls ~/openclaw/transcripts/` (on host)
-5. **Check Watcher 2:** Should see "New transcript: filename.txt" and send confirmation (in VM)
+5. **Check transcript-watcher:** Should see "New transcript: filename.txt" and send confirmation (in VM)
 6. **Check Telegram:** Should receive the transcribed text as a message from your bot
 
 ### 5.7 Troubleshooting Async Pipeline
@@ -887,7 +922,7 @@ tmux kill-session -t transcript-watcher
 - Check recordings folder: `ls ~/openclaw/media/recordings/`
 
 **Transcripts not being processed:**
-- Check Watcher 2 is running: `tmux ls` and look for `transcript-watcher` session (in VM)
+- Check transcript-watcher is running: `tmux ls` and look for `transcript-watcher` session (in VM)
 - Check logs: `tmux attach -t transcript-watcher` to view live output (in VM)
 - Check session memory enabled: `openclaw config get agents.defaults.memorySearch.experimental.sessionMemory` (in VM)
 - Check VM can see transcripts: `ls /Volumes/My\ Shared\ Files/transcripts/` (in VM)
@@ -902,7 +937,7 @@ After implementing the async pipeline, verify everything is working:
 - [ ] Shared folders visible in VM: `ls "/Volumes/My Shared Files/"`
 - [ ] Host transcription working: check `/tmp/transcribe.log`
 - [ ] Session memory enabled: `openclaw config set agents.defaults.memorySearch.experimental.sessionMemory true`
-- [ ] Watcher 2 running in VM: `tmux ls` shows `transcript-watcher` session
+- [ ] transcript-watcher running in VM: `tmux ls` shows `transcript-watcher` session
 - [ ] Send voice message to Telegram bot
 - [ ] Verify audio lands in `~/openclaw/media/recordings/` (host)
 - [ ] Verify mlx_audio transcribes to `~/openclaw/transcripts/` (host)
@@ -914,132 +949,10 @@ After implementing the async pipeline, verify everything is working:
 - Voice message sent → appears in shared folder immediately (< 1 second)
 - Host transcription → varies by length (e.g., 2-hour meeting ≈ 30-60 minutes)
 - After transcription → rsync to Google Drive, move to NAS (< 10 seconds)
-- Watcher 2 sends → immediately after transcript appears (< 1 second)
+- transcript-watcher sends → immediately after transcript appears (< 1 second)
 
----
 
-## Part 6: Daily Workflow
-
-### 6.1 Quick Voice Memos
-
-**Via Telegram voice message:**
-1. Open bot → hold mic → speak → release
-2. Bot transcribes and responds
-
-Examples:
-```
-"Remember that John prefers morning meetings"
-"Note: API deadline is March 15th"
-"Todo: review security proposal tomorrow"
-```
-
-### 6.2 Short Meetings (< 1 hour)
-
-**Option A: Record in Telegram**
-- Long-press mic for voice message
-- Speak during meeting
-- Release when done
-- Bot transcribes automatically
-
-**Option B: Upload audio file**
-1. Record with Voice Memos/QuickTime
-2. Telegram → bot → attachment → Audio
-3. Add caption: "Meeting with design team"
-4. Bot transcribes
-
-### 6.3 Long Meetings (> 1 hour)
-
-**Option A: Use async 2-watcher pipeline (recommended for multi-hour recordings)**
-
-1. Send audio file to Telegram bot (or record directly in OpenClaw media folder)
-2. Watcher 1 copies to shared folder
-3. mlx_audio transcribes on host (may take hours)
-4. Watcher 2 sends transcript back to Telegram when done
-5. Bot automatically indexes and makes searchable
-
-**Option B: Use host transcription directly (for recordings not from Telegram)**
-
-```bash
-# On host Mac:
-# 1. Record to ~/openclaw/xin/media/inbound/meeting-2024-01-15.m4a
-# 2. Transcription runs automatically (or manually):
-~/openclaw/scripts/knowledge-base/xin/transcribe.sh
-
-# Transcript appears in ~/openclaw/xin/transcripts/
-# Synced to Google Drive via rsync
-# Audio moved to NAS at /Volumes/NAS_1/xin/openclaw/media/recordings/
-# VM sees transcript at /Volumes/My Shared Files/xin/transcripts/
-```
-
-Then tell bot:
-```
-"Index the meeting from January 15th and summarize"
-```
-
-**Archival:**
-- Audio files: moved to NAS immediately after transcription
-- Transcripts: saved to Google Drive (synced to cloud, accessible from any device)
-- NAS path: `/Volumes/NAS_1/Xin/openclaw/media/recordings/`
-
-### 6.4 Query Your Memory
-
-Send to bot (text or voice):
-```
-"What did we discuss yesterday?"
-"What are John's preferences?"
-"Summarize this week's decisions"
-"Find tasks for the frontend"
-"What was decided about the API?"
-```
-
-### 6.5 Store Important Info
-
-```
-"Remember: AWS account ID is 123456789"
-"Store: production needs 2 approvers"
-"Important: Sarah is on vacation Feb 1-15"
-```
-
-### 6.6 Daily Review
-
-End of day:
-```
-"Summarize everything I noted today and list action items"
-```
-
----
-
-## Part 7: Reminders
-
-OpenClaw has built-in cron for reminders.
-
-### Examples
-
-Send to bot:
-```
-"Remind me in 20 minutes to check the build"
-"Remind me tomorrow at 9am about standup"
-"Daily reminder at 6pm to write journal"
-"Every Monday at 10am remind me to review metrics"
-```
-
-### Manage Reminders
-
-```
-"List my reminders"
-"Cancel the standup reminder"
-"Show scheduled jobs"
-```
-
-Or via CLI:
-```bash
-openclaw cron list
-openclaw cron remove <job-id>
-```
-
----
-
-## Part 8: Backup and Sync Strategy
+## Part 6: Backup and Sync Strategy
 
 ### What Gets Backed Up
 
@@ -1112,293 +1025,6 @@ Since markdown lives in Google Drive:
 - **Edit on laptop** - any text editor + Google Drive sync
 - **Query via Telegram** - works from anywhere
 
----
-
-## Part 9: Cost Summary
-
-### Unified Local Transcription Flow
-
-| Component | Monthly Cost |
-|-----------|--------------|
-| Claude Sonnet 4 (~1.2M tokens) | ~$6 |
-| Embeddings (Ollama local) | **FREE** |
-| mlx-audio (local transcription) | **FREE** |
-| **Total** | **~$6/month** |
-
-### Usage Estimates
-
-- Voice memos: 20/day × 1 min = 600 min/month
-- Meetings: 3/week × 1 hour = 720 min/month
-- Long recordings: 2/month × 2 hours = 240 min/month
-- **All transcription: 100% local via mlx-audio (FREE)**
-- LLM queries: ~40/day × ~30K tokens = 1.2M tokens/month
-
-### Why This Setup?
-
-**Benefits:**
-- ✅ **10x cheaper** than cloud transcription ($6 vs $60+/month)
-- ✅ **100% privacy** for voice/audio (never leaves your Mac)
-- ✅ **Built-in speaker diarization** (VibeVoice-ASR)
-- ✅ **Fast** (Metal GPU acceleration on M1/M2/M3)
-- ✅ **Simple** (single unified flow)
-- ✅ **Immediate NAS archival** (audio moved after transcription)
-- ✅ **Fast LLM access** (transcripts stay local)
-
-**Requirements:**
-- Apple Silicon Mac (M1/M2/M3) for mlx-audio
-- NAS for archival (audio files moved immediately after transcription)
-
----
-
-## Part 10: Getting Claude API Access
-
-### Why API (not subscription)?
-
-| Factor | API | Claude Pro |
-|--------|-----|------------|
-| **For OpenClaw** | ✅ Required | ❌ Won't work |
-| **Pay-as-you-go** | ✅ ~$6/mo | ❌ $20/mo flat |
-| **Programmatic** | ✅ Yes | ❌ Web only |
-
-**You need the API.** Subscription is for web chat only.
-
-### Setup
-
-1. Create account: https://console.anthropic.com/
-2. Billing → Add payment method
-3. API Keys → Create Key
-4. Copy key (starts with `sk-ant-`)
-5. Configure: `openclaw config set providers.anthropic.apiKey "sk-ant-..."`
-
-### Set Spending Limit (Optional)
-
-Console → Settings → Limits → Monthly spend: $20
-
-### Test
-
-```bash
-openclaw agent --message "Hello, confirm you are Sonnet 4"
-```
-
----
-
-## Part 11: LLM Provider Configuration
-
-### 11.1 Where Credentials Live
-
-OpenClaw stores LLM provider credentials in multiple locations depending on the authentication method:
-
-- **API keys and OAuth tokens:** `~/.openclaw/agents/<agentId>/auth-profiles.json` (per-agent auth profiles)
-- **Model selection:** `~/.openclaw/openclaw.json` (global config)
-- **Environment variable fallbacks:** `ANTHROPIC_API_KEY`, `ZAI_API_KEY`, `OPENAI_API_KEY`, etc.
-
-For most users, the simplest approach is to use `openclaw config set` commands, which automatically store credentials in the appropriate location.
-
-### 11.2 Common Operations
-
-| Task | Command |
-|------|---------|
-| Add a provider (interactive) | `openclaw onboard --auth-choice <choice>` |
-| Set default model | `openclaw config set agents.defaults.model "<provider/model>"` |
-| Set API key via config | `openclaw config set providers.<name>.apiKey "sk-..."` |
-| View configured channels | `openclaw channels status` |
-| Probe channel health | `openclaw channels status --probe` |
-| View current config | `openclaw config get agents.defaults` |
-
-### 11.3 Supported Providers
-
-OpenClaw supports a wide range of LLM providers:
-
-- **Anthropic:** Claude 3.5 Sonnet, Claude 3 Opus, Claude 3.5 Haiku
-- **OpenAI:** GPT-4, GPT-4 Turbo (Codex)
-- **Google:** Gemini Pro, Gemini Ultra
-- **Moonshot:** Kimi (moonshot-v1)
-- **MiniMax:** MiniMax-01, MiniMax-Text-01
-- **Z.AI (Zhipu AI):** GLM-4, GLM-5
-- **Xiaomi:** Xiaomi-LLM
-- **OpenRouter:** Multi-provider gateway
-- **Vercel AI Gateway:** Vercel-hosted models
-- **Cloudflare AI Gateway:** Cloudflare Workers AI
-- **OpenCode Zen:** OpenCode models
-- **Synthetic:** Synthetic LLM
-- **Venice:** Venice AI
-- **GitHub Copilot:** GitHub-hosted models
-- **Qwen:** Qwen models
-
-### 11.4 Example: Adding Z.AI GLM as a Second Provider
-
-This example shows how to add Z.AI (Zhipu AI) GLM alongside your existing Anthropic provider:
-
-**Step 1: Get your Z.AI API key**
-
-1. Sign up at https://open.bigmodel.cn/
-2. Navigate to API Keys section
-3. Create a new API key
-4. Copy the key (starts with a random string)
-
-**Step 2: Configure Z.AI in OpenClaw**
-
-```bash
-# Inside VM (or on host if running OpenClaw directly)
-# Option A: Interactive onboarding
-openclaw onboard --auth-choice zai-api-key
-
-# Follow the prompts and paste your Z.AI API key when asked
-
-# Option B: Direct config command
-openclaw config set providers.zai.apiKey "YOUR_ZAI_API_KEY"
-```
-
-**Step 3: Switch to GLM-5 as default model**
-
-```bash
-# Set Z.AI GLM-5 as your default model
-openclaw config set agents.defaults.model "zai/glm-5"
-
-# Verify the change
-openclaw config get agents.defaults.model
-```
-
-**Step 4: Verify provider is working**
-
-```bash
-# Check channel status (includes provider health)
-openclaw channels status
-
-# Test with a direct message
-openclaw agent --message "Hello, confirm your model name"
-```
-
-**Expected output:** The agent should respond confirming it's using GLM-5.
-
-**Switching back to Claude:**
-
-```bash
-# Switch back to Claude Sonnet 4
-openclaw config set agents.defaults.model "claude-sonnet-4-20250514"
-```
-
-**Using multiple providers simultaneously:**
-
-You can configure different agents to use different providers:
-
-```bash
-# Create a GLM-powered agent for cost-sensitive tasks
-openclaw agents add glm-agent
-openclaw config set agents.profiles.glm-agent.model "zai/glm-5"
-
-# Create a Claude-powered agent for complex reasoning
-openclaw agents add claude-agent
-openclaw config set agents.profiles.claude-agent.model "claude-sonnet-4-20250514"
-```
-
-### 11.5 Manual Provider Configuration (Version-Independent)
-
-The `models.providers` config accepts any provider name and model definition, so you can register providers and models without waiting for an OpenClaw update. This is useful when a provider releases new models that are not yet in the built-in catalog.
-
-**Registering a provider manually:**
-
-```bash
-openclaw config set models.providers.<provider-name> '{
-  "baseUrl": "<provider-api-endpoint>",
-  "api": "<api-type>",
-  "apiKey": "<your-api-key>",
-  "models": [
-    {
-      "id": "<model-id>",
-      "name": "<display-name>",
-      "reasoning": true,
-      "input": ["text"],
-      "contextWindow": 204800,
-      "maxTokens": 131072
-    }
-  ]
-}'
-```
-
-**Supported `api` types:**
-
-| Type | Compatible providers |
-|------|---------------------|
-| `openai-completions` | OpenAI, Z.AI, Moonshot, xAI, OpenRouter, most OpenAI-compatible APIs |
-| `openai-responses` | OpenAI Responses API |
-| `anthropic-messages` | Anthropic |
-| `google-generative-ai` | Google Gemini |
-| `bedrock-converse-stream` | AWS Bedrock |
-| `github-copilot` | GitHub Copilot |
-
-**Example: Registering Z.AI with GLM-5 manually**
-
-If your installed OpenClaw version does not include Z.AI support yet, you can add it yourself:
-
-```bash
-# Register the Z.AI provider with GLM-5
-openclaw config set models.providers.zai '{
-  "baseUrl": "https://api.z.ai/api/coding/paas/v4",
-  "api": "openai-completions",
-  "apiKey": "YOUR_ZAI_API_KEY",
-  "models": [
-    {
-      "id": "glm-5",
-      "name": "GLM-5",
-      "reasoning": true,
-      "input": ["text"],
-      "contextWindow": 204800,
-      "maxTokens": 131072
-    }
-  ]
-}'
-
-# Set GLM-5 as default
-openclaw config set agents.defaults.model.primary "zai/glm-5"
-```
-
-For users in mainland China, use the CN endpoint instead:
-
-```bash
-"baseUrl": "https://open.bigmodel.cn/api/coding/paas/v4"
-```
-
-**Adding new models to an existing provider:**
-
-When a provider releases a new model, add it to the `models` array. For example, to add a hypothetical `glm-6` alongside the existing `glm-5`:
-
-```bash
-openclaw config set models.providers.zai.models '[
-  {
-    "id": "glm-5",
-    "name": "GLM-5",
-    "reasoning": true,
-    "input": ["text"],
-    "contextWindow": 204800,
-    "maxTokens": 131072
-  },
-  {
-    "id": "glm-6",
-    "name": "GLM-6",
-    "reasoning": true,
-    "input": ["text"],
-    "contextWindow": 204800,
-    "maxTokens": 131072
-  }
-]'
-
-# Switch to the new model
-openclaw config set agents.defaults.model.primary "zai/glm-6"
-```
-
-**Model definition fields:**
-
-| Field | Required | Description |
-|-------|----------|-------------|
-| `id` | Yes | Model ID sent to the API (e.g., `glm-5`) |
-| `name` | Yes | Display name in status/logs |
-| `reasoning` | No | Whether the model supports reasoning/thinking |
-| `input` | No | Input modalities: `["text"]` or `["text", "image"]` |
-| `contextWindow` | No | Max input tokens (check provider docs) |
-| `maxTokens` | No | Max output tokens (check provider docs) |
-
----
 
 ## Useful Commands
 
@@ -1445,423 +1071,14 @@ lume restart memory-app
 
 ## Troubleshooting
 
-### Browser Not Starting in VM
+### Browser Setup
 
-If Chrome/Chromium fails to start inside a Lume macOS VM (error: "failed to start chrome CDP on port 18800"), it's usually due to Gatekeeper quarantine or missing GUI session.
-
-**Root cause:** Homebrew-installed Chromium gets quarantined by macOS. Without a GUI prompt to approve, it silently fails to launch. SSH-only VMs also lack an Aqua session for window display.
-
-**Fix 1: Remove Gatekeeper quarantine**
+After the gateway starts, launch the browser process:
 
 ```bash
 # Inside VM
-xattr -dr com.apple.quarantine /Applications/Chromium.app
+openclaw browser start --profile=chrome
 ```
-
-**Fix 2: Enable headless mode**
-
-Headless mode works without GUI session (required for SSH-only VMs):
-
-```bash
-# Inside VM
-openclaw config set browser.headless true
-```
-
-**Fix 3: Set executable path explicitly**
-
-If auto-detection fails, override the path:
-
-```bash
-# Inside VM
-openclaw config set browser.executablePath "/Applications/Chromium.app/Contents/MacOS/Chromium"
-```
-
-For non-standard installs, adjust the path accordingly.
-
-**Fix 4: Disable sandbox (last resort)**
-
-If the above don't work, disable Chrome's sandbox (reduces security):
-
-```bash
-# Inside VM
-openclaw config set browser.noSandbox true
-```
-
-**Verify CDP is reachable**
-
-Test manually to confirm Chrome starts and CDP responds:
-
-```bash
-# Inside VM - spawn Chromium with CDP
-/Applications/Chromium.app/Contents/MacOS/Chromium \
-  --headless=new \
-  --remote-debugging-port=18800 \
-  --no-first-run \
-  --disable-gpu &
-
-# Wait 5 seconds, then test CDP
-sleep 5
-curl -s http://127.0.0.1:18800/json/version
-
-# Kill test instance
-pkill -f "Chromium.*remote-debugging-port=18800"
-```
-
-Expected output: JSON with browser version and WebSocket debugger URL.
-
-**Config reference**
-
-For more browser configuration options, see:
-- Browser tool documentation: `docs/tools/browser.md`
-- Browser implementation: `src/browser/chrome.ts:296` (CDP startup logic)
-- Executable detection: `src/browser/chrome.executables.ts:456-507` (macOS paths)
-
-### mlx-audio Issues
-
-**Model not downloading:**
-```bash
-# Models auto-download from Hugging Face on first use
-# If issues, try explicit download:
-pip install huggingface_hub
-huggingface-cli download mlx-community/VibeVoice-ASR-bf16
-```
-
-**Slow transcription:**
-- Ensure you're on Apple Silicon (M1/M2/M3)
-- Check Activity Monitor → GPU usage
-- Increase `--max-tokens` parameter (default 8192)
-
-**ImportError or pip issues:**
-```bash
-# Use a virtual environment
-python3 -m venv ~/mlx-env
-source ~/mlx-env/bin/activate
-pip install mlx-audio
-```
-
-**Hallucination / repetitive output:**
-- VibeVoice is generally more robust than Whisper
-- Try adjusting `--temperature` (use 0.0 for deterministic output)
-- Check audio quality (16kHz recommended)
-
-### VM Issues
-
-**Shared folder not visible:**
-```bash
-# Verify VM is running with correct shared dir
-lume run nix --shared-dir ~/openclaw
-
-# Check mounts inside VM
-lume ssh nix
-ls /Volumes/My\ Shared\ Files/
-ls /Volumes/My\ Shared\ Files/media/recordings
-ls /Volumes/My\ Shared\ Files/transcripts
-ls /Volumes/My\ Shared\ Files/workspace
-```
-
-### Memory Not Indexing
-
-```bash
-# Force reindex
-openclaw memory index --force
-
-# Check status
-openclaw memory status --deep
-
-# Verify paths
-ls ~/.openclaw/workspace/
-ls /Volumes/My\ Shared\ Files/media/recordings
-ls /Volumes/My\ Shared\ Files/transcripts
-```
-
-### Memory Search After Config Changes
-
-If you change your embedding provider settings (e.g., switching from OpenAI to Ollama, or changing the model/baseUrl), you may see `database is not open` errors or empty results from `openclaw memory search`. This happens because the index needs to be rebuilt with the new embedding model.
-
-Run once after changing embedding config:
-
-```bash
-openclaw memory index
-```
-
-This rebuilds the search index using your new embedding provider. After the initial rebuild, the index stays up-to-date automatically via the gateway's file watcher and incremental syncs.
-
-### Audio Files Not Transcribing
-
-**Check launchd is running:**
-```bash
-# Check if loaded
-launchctl list | grep transcribe
-
-# Check logs
-tail -f /tmp/transcribe.log
-tail -f /tmp/transcribe.err
-
-# Test manually
-~/openclaw/scripts/transcribe.sh
-```
-
-**Check file permissions:**
-```bash
-ls -la ~/openclaw/media/recordings/
-ls -la ~/openclaw/transcripts/
-ls -la ~/Insync/bac2qh@gmail.com/Google\ Drive/openclaw/transcripts/
-```
-
-### Audio Files Not Moving to NAS
-
-**Check NAS mount:**
-```bash
-# Verify NAS is mounted
-ls /Volumes/NAS_1/Xin/openclaw/media/recordings
-
-# Check transcription logs
-tail -f /tmp/transcribe.log
-
-# Files should be moved immediately after transcription
-# If NAS not mounted, files remain in ~/openclaw/media/recordings/
-```
-
-### Telegram Bot Not Responding
-
-```bash
-# Check gateway
-ps aux | grep openclaw
-
-# Check logs
-tail -f /tmp/openclaw.log
-
-# Verify config
-openclaw config get channels.telegram
-
-# Test connection
-openclaw channels status --probe
-```
-
-### Memory Not Saving When AI Says "Noted"
-
-If the AI responds "Noted" or confirms it saved information, but nothing appears in memory files or search results:
-
-**Check transcript routing:**
-
-Short voice memos (< 10 min) share the main session and should persist memory automatically. For long recordings processed by the separate agent, verify:
-
-1. The `transcript-processor` agent exists: `openclaw agents list`
-2. It shares the workspace: `openclaw agents get transcript-processor` (check `--workspace`)
-3. The relay message was sent after processing (check watcher logs)
-
-**Test memory persistence:**
-
-```bash
-# Send a text message: "remember my favorite color is blue"
-# Verify it saved:
-cat ~/.openclaw/workspace/memory/*.md
-# OR
-openclaw memory search "favorite color"
-
-# If it saved, the issue is resolved
-```
-
-### Voice Transcription Failing
-
-**Check mlx-audio:**
-```bash
-# Test mlx-audio installation
-python -c "import mlx_audio"
-
-# Check model download
-ls ~/.cache/huggingface/hub/ | grep VibeVoice
-
-# Test transcription manually
-say "Test" -o /tmp/test.aiff
-ffmpeg -y -i /tmp/test.aiff /tmp/test.mp3 2>/dev/null
-python -m mlx_audio.stt.generate \
-    --model mlx-community/VibeVoice-ASR-bf16 \
-    --audio /tmp/test.mp3 \
-    --format json
-```
-
-**File too large:**
-```bash
-# Increase Telegram limit
-openclaw config set channels.telegram.mediaMaxMb 50
-
-# All files transcribed locally (no size limits on host)
-```
-
----
-
-## Next Steps
-
-### 1. Add More Memory Sources
-
-```bash
-# Email archives
-ln -s ~/mail-archive ~/.openclaw/workspace/mail
-
-# Documents
-ln -s ~/Documents/work ~/.openclaw/workspace/docs
-
-# Code notes
-ln -s ~/projects/notes ~/.openclaw/workspace/code-notes
-```
-
-### 2. Customize Agent Personality
-
-Create `~/.openclaw/workspace/AGENT.md`:
-
-```markdown
-# Agent Instructions
-
-You are my personal knowledge assistant. Your role is to:
-1. Help me remember important context
-2. Summarize meetings and decisions
-3. Remind me of action items
-4. Answer questions about past conversations
-
-Communication style:
-- Be concise and direct
-- Use bullet points
-- Highlight action items
-- Include relevant timestamps/speakers
-```
-
-### 3. Advanced: Multi-Agent Setup
-
-Run specialized agents for different contexts. Each agent has its own session but can share workspace directories for memory access.
-
-**Create additional agents:**
-
-```bash
-# Create work-focused agent with shared workspace
-openclaw agents add work --workspace ~/.openclaw/workspace
-
-# Create personal agent with shared workspace
-openclaw agents add personal --workspace ~/.openclaw/workspace
-
-# List all agents
-openclaw agents list
-```
-
-**Per-User Agent Routing in Telegram:**
-
-OpenClaw supports routing messages to different agents based on the sender's Telegram chat ID using the `bindings` configuration. By default, all messages go to the `main` agent, but you can route specific users to dedicated agents for fully isolated personal knowledge bases.
-
-**Example: Route messages by chat ID**
-
-```yaml
-# ~/.openclaw/config.yml
-
-# Route xin's DMs to the "xin" agent, zhuoyue's to "zhuoyue"
-bindings:
-  - agentId: "xin"
-    match:
-      channel: "telegram"
-      peer:
-        kind: "direct"
-        id: "123456789"  # Xin's Telegram chat ID
-  - agentId: "zhuoyue"
-    match:
-      channel: "telegram"
-      peer:
-        kind: "direct"
-        id: "987654321"  # Zhuoyue's Telegram chat ID
-
-# Optional: Isolate conversation history per user
-session:
-  dmScope: "per-peer"  # Each chat ID gets a separate session
-```
-
-**CLI equivalent:**
-
-```bash
-# Add bindings via CLI
-openclaw config set bindings '[
-  {
-    "agentId": "xin",
-    "match": {
-      "channel": "telegram",
-      "peer": {"kind": "direct", "id": "123456789"}
-    }
-  },
-  {
-    "agentId": "zhuoyue",
-    "match": {
-      "channel": "telegram",
-      "peer": {"kind": "direct", "id": "987654321"}
-    }
-  }
-]'
-
-# Set session scope
-openclaw config set session.dmScope per-peer
-```
-
-**How to get your Telegram chat ID:** See [section 5.4](#54-setup-get-your-telegram-chat-id) below.
-
-**Routing Priority:**
-
-The routing engine matches bindings in this order (first match wins):
-
-1. **Peer ID** (chat ID) — most specific
-2. **Parent peer ID** (for threads)
-3. **Guild ID** (Discord servers)
-4. **Team ID** (Slack workspaces)
-5. **Account ID** (specific Telegram bot account)
-6. **Channel wildcard** (`accountId: "*"`) — all accounts on this channel
-7. **Default agent** (fallback)
-
-**Per-Bot-Account Routing:**
-
-To route all messages from a specific Telegram bot account to an agent:
-
-```yaml
-bindings:
-  - agentId: "personal"
-    match:
-      channel: "telegram"
-      accountId: "bot123456789:ABCDEF..."  # Telegram bot token prefix
-```
-
-This is useful when running multiple bot accounts and want each bot to use a different agent without per-user granularity.
-
-### 4. Backup Strategy
-
-```bash
-# Backup script
-#!/bin/bash
-BACKUP_DIR=~/backups/openclaw-$(date +%Y-%m-%d)
-mkdir -p "$BACKUP_DIR"
-
-# Backup config only (transcripts and workspace already in Google Drive, audio on NAS)
-cp -r ~/.openclaw "$BACKUP_DIR/"
-
-# Compress
-tar -czf "$BACKUP_DIR.tar.gz" "$BACKUP_DIR"
-rm -rf "$BACKUP_DIR"
-```
-
----
-
-## FAQ
-
-**Q: Can I use this without Lume VM?**
-A: Yes, install OpenClaw directly on your Mac. Skip Part 2 and run everything on the host.
-
-**Q: Can I use other messaging apps?**
-A: Yes, OpenClaw supports Discord, Slack, Signal, WhatsApp, and more. See `openclaw channels status`.
-
-**Q: How private is this?**
-A: Voice transcription and LLM queries go to cloud APIs. For maximum privacy, use mlx-audio + local LLM (Ollama). mlx-audio runs 100% locally on your M1/M2/M3 Mac.
-
-**Q: Can I run this on Linux?**
-A: Yes, the VM setup works the same. For host transcription on Linux (or Intel Mac), use whisper.cpp or OpenAI Whisper instead of mlx-audio.
-
-**Q: What if I want speaker names (not SPEAKER_00)?**
-A: pyannote doesn't do speaker identification (who is who), only diarization (how many speakers). For names, use a service like AssemblyAI or manually label.
-
-**Q: Can I search across all memories at once?**
-A: Yes, that's the default. OpenClaw indexes everything under `~/.openclaw/workspace/` and `/Volumes/My Shared Files/transcripts/`.
 
 ---
 
@@ -1872,7 +1089,6 @@ A: Yes, that's the default. OpenClaw indexes everything under `~/.openclaw/works
 - **mlx-audio**: https://github.com/Blaizzy/mlx-audio
 - **VibeVoice-ASR**: https://huggingface.co/mlx-community/VibeVoice-ASR-bf16
 - **Lume VM**: https://github.com/lume-vm/lume
-- **Claude API**: https://console.anthropic.com/
 
 ---
 
