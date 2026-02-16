@@ -1743,9 +1743,87 @@ openclaw agents add personal --workspace ~/.openclaw/workspace
 openclaw agents list
 ```
 
-**Switch between agents in Telegram:**
+**Per-User Agent Routing in Telegram:**
 
-The agent routing is controlled by the gateway configuration. By default, all messages go to the `main` agent. To use different agents for different contexts, you would need to implement custom routing logic or use separate bot tokens for each agent.
+OpenClaw supports routing messages to different agents based on the sender's Telegram chat ID using the `bindings` configuration. By default, all messages go to the `main` agent, but you can route specific users to dedicated agents for fully isolated personal knowledge bases.
+
+**Example: Route messages by chat ID**
+
+```yaml
+# ~/.openclaw/config.yml
+
+# Route xin's DMs to the "xin" agent, zhuoyue's to "zhuoyue"
+bindings:
+  - agentId: "xin"
+    match:
+      channel: "telegram"
+      peer:
+        kind: "direct"
+        id: "123456789"  # Xin's Telegram chat ID
+  - agentId: "zhuoyue"
+    match:
+      channel: "telegram"
+      peer:
+        kind: "direct"
+        id: "987654321"  # Zhuoyue's Telegram chat ID
+
+# Optional: Isolate conversation history per user
+session:
+  dmScope: "per-peer"  # Each chat ID gets a separate session
+```
+
+**CLI equivalent:**
+
+```bash
+# Add bindings via CLI
+openclaw config set bindings '[
+  {
+    "agentId": "xin",
+    "match": {
+      "channel": "telegram",
+      "peer": {"kind": "direct", "id": "123456789"}
+    }
+  },
+  {
+    "agentId": "zhuoyue",
+    "match": {
+      "channel": "telegram",
+      "peer": {"kind": "direct", "id": "987654321"}
+    }
+  }
+]'
+
+# Set session scope
+openclaw config set session.dmScope per-peer
+```
+
+**How to get your Telegram chat ID:** See [section 5.4](#54-setup-get-your-telegram-chat-id) below.
+
+**Routing Priority:**
+
+The routing engine matches bindings in this order (first match wins):
+
+1. **Peer ID** (chat ID) — most specific
+2. **Parent peer ID** (for threads)
+3. **Guild ID** (Discord servers)
+4. **Team ID** (Slack workspaces)
+5. **Account ID** (specific Telegram bot account)
+6. **Channel wildcard** (`accountId: "*"`) — all accounts on this channel
+7. **Default agent** (fallback)
+
+**Per-Bot-Account Routing:**
+
+To route all messages from a specific Telegram bot account to an agent:
+
+```yaml
+bindings:
+  - agentId: "personal"
+    match:
+      channel: "telegram"
+      accountId: "bot123456789:ABCDEF..."  # Telegram bot token prefix
+```
+
+This is useful when running multiple bot accounts and want each bot to use a different agent without per-user granularity.
 
 ### 4. Backup Strategy
 
