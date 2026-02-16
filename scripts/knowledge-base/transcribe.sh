@@ -7,7 +7,9 @@
 # After successful transcription, audio files are moved to NAS for archival.
 #
 # Supported input formats: ogg, m4a (Telegram voice/audio messages)
-# Files are converted to MP3 before transcription (miniaudio compatibility).
+# Short files (<=10 min) are converted to MP3 before transcription (miniaudio compatibility).
+# Long files (>10 min) skip conversion — VibeVoice-ASR receives the original format,
+# and chunked files (>30 min) are split directly into MP3 chunks via ffmpeg.
 #
 # Usage:
 #   1. Drop audio files into ~/openclaw/{USER_PROFILE}/media/inbound/
@@ -53,9 +55,9 @@ MODEL_THRESHOLD=600  # Use FULL_MODEL if audio > 10 minutes (in seconds)
 MAX_TOKENS=65536
 
 # Chunking configuration (for long recordings)
-CHUNK_THRESHOLD=3300 # Split if audio > 55 minutes (in seconds)
-CHUNK_DURATION=3300  # 55 minutes per chunk (in seconds)
-CHUNK_STEP=3000      # Start next chunk at 50 minutes (5 min overlap)
+CHUNK_THRESHOLD=1800 # Split if audio > 30 minutes (in seconds)
+CHUNK_DURATION=1800  # 30 minutes per chunk (in seconds)
+CHUNK_STEP=1500      # Start next chunk at 25 minutes (5 min overlap)
 
 # Hotwords configuration (for VibeVoice-ASR context biasing)
 HOTWORDS_FILE="${BASE_DIR}/config/hotwords.txt"
@@ -101,7 +103,7 @@ split_audio_into_chunks() {
     local start_time=0
     local chunks=()
 
-    log "  Splitting into overlapping chunks (55 min each, 5 min overlap)..."
+    log "  Splitting into overlapping chunks (30 min each, 5 min overlap)..."
 
     while [[ $start_time -lt $duration ]]; do
         local chunk_file="${output_base}_part${chunk_num}.mp3"
@@ -148,24 +150,8 @@ for audio_file in "$INPUT_DIR"/*.ogg "$INPUT_DIR"/*.m4a; do
 
     log "Processing: $filename"
 
-    # Convert to MP3 if not already (miniaudio only reliably supports mp3/wav/flac)
-    if [[ "$extension" == "mp3" ]]; then
-        mp3_file="$audio_file"
-        converted=false
-    else
-        mp3_file="$INPUT_DIR/${basename_no_ext}.mp3"
-        log "  Converting to MP3..."
-        if ffmpeg -y -i "$audio_file" -q:a 2 "$mp3_file" -loglevel warning; then
-            log "  ✓ Converted: ${basename_no_ext}.mp3"
-            converted=true
-        else
-            log_err "  Conversion failed"
-            continue
-        fi
-    fi
-
-    # Get audio duration
-    duration=$(get_audio_duration "$mp3_file")
+    # Get audio duration from original file (ffprobe handles m4a/ogg natively)
+    duration=$(get_audio_duration "$audio_file")
     if [[ -z "$duration" || "$duration" -eq 0 ]]; then
         log_err "  Could not determine audio duration"
         continue
@@ -193,69 +179,18 @@ for audio_file in "$INPUT_DIR"/*.ogg "$INPUT_DIR"/*.m4a; do
         fi
     fi
 
-    # Check if audio needs to be split into chunks
-    if [[ "$duration" -gt "$CHUNK_THRESHOLD" ]]; then
-        log "  Audio is longer than 55 minutes, splitting into chunks..."
-
-        # Split audio into chunks
-        chunk_base="$INPUT_DIR/${basename_no_ext}"
-        chunks=$(split_audio_into_chunks "$mp3_file" "$chunk_base" "$duration")
-
-        if [[ -z "$chunks" ]]; then
-            log_err "  Failed to create chunks"
-            continue
-        fi
-
-        # Transcribe each chunk
-        transcription_failed=false
-        chunk_files=()
-        for chunk_file in $chunks; do
-            chunk_basename=$(basename "$chunk_file" .mp3)
-            chunk_output="${output_base}_${chunk_basename##*_}"  # Extract partN from filename
-
-            log "  Transcribing chunk: $(basename "$chunk_file")..."
-            if "$PYTHON" -m mlx_audio.stt.generate \
-                --model "$selected_model" \
-                --audio "$chunk_file" \
-                --output-path "${chunk_output}" \
-                --format json \
-                --max-tokens "$MAX_TOKENS" \
-                ${context_args[@]+"${context_args[@]}"}; then
-                log "    ✓ Chunk transcription saved: ${chunk_output}.json"
-                chunk_files+=("$chunk_file")
-            else
-                log_err "    Chunk transcription failed"
-                transcription_failed=true
-                break
-            fi
-        done
-
-        # Clean up chunk files if all transcriptions succeeded
-        if [[ "$transcription_failed" == false ]]; then
-            log "  ✓ All chunks transcribed successfully"
-            for chunk_file in "${chunk_files[@]}"; do
-                rm -f "$chunk_file"
-                log "  ✓ Cleaned up: $(basename "$chunk_file")"
-            done
-
-            # Move original audio to NAS
-            if [ -d "$NAS_RECORDINGS" ]; then
-                mv "$audio_file" "$NAS_RECORDINGS/"
-                log "  ✓ Moved to NAS: $filename"
-                # Remove the converted MP3 (only needed for transcription)
-                if [[ "$converted" == true ]]; then
-                    rm -f "$mp3_file"
-                    log "  ✓ Removed converted MP3: ${basename_no_ext}.mp3"
-                fi
-            else
-                log "  ⚠ NAS not mounted, keeping files locally"
-            fi
+    # Branch on duration: short files need MP3 conversion, long files skip it
+    if [[ "$duration" -le "$MODEL_THRESHOLD" ]]; then
+        # Short audio (<= 10 min): Convert to MP3 and transcribe with whisper-turbo
+        log "  Converting to MP3 for whisper-turbo..."
+        mp3_file="$INPUT_DIR/${basename_no_ext}.mp3"
+        if ffmpeg -y -i "$audio_file" -q:a 2 "$mp3_file" -loglevel warning; then
+            log "  ✓ Converted: ${basename_no_ext}.mp3"
         else
-            log_err "  Some chunks failed to transcribe, keeping all files"
+            log_err "  Conversion failed"
             continue
         fi
-    else
-        # Audio is under threshold, transcribe as single file (existing behavior)
+
         log "  Transcribing with ${selected_model##*/}..."
         if "$PYTHON" -m mlx_audio.stt.generate \
             --model "$selected_model" \
@@ -271,16 +206,96 @@ for audio_file in "$INPUT_DIR"/*.ogg "$INPUT_DIR"/*.m4a; do
                 mv "$audio_file" "$NAS_RECORDINGS/"
                 log "  ✓ Moved to NAS: $filename"
                 # Remove the converted MP3 (only needed for transcription)
-                if [[ "$converted" == true ]]; then
-                    rm -f "$mp3_file"
-                    log "  ✓ Removed converted MP3: ${basename_no_ext}.mp3"
-                fi
+                rm -f "$mp3_file"
+                log "  ✓ Removed converted MP3: ${basename_no_ext}.mp3"
             else
                 log "  ⚠ NAS not mounted, keeping files locally"
             fi
         else
             log_err "  Transcription failed"
             continue
+        fi
+    else
+        # Long audio (> 10 min): Skip conversion, VibeVoice-ASR handles original format
+        if [[ "$duration" -gt "$CHUNK_THRESHOLD" ]]; then
+            # Very long audio (> 30 min): Split original into MP3 chunks
+            log "  Audio is longer than 30 minutes, splitting into chunks..."
+
+            # Split audio into chunks
+            chunk_base="$INPUT_DIR/${basename_no_ext}"
+            chunks=$(split_audio_into_chunks "$audio_file" "$chunk_base" "$duration")
+
+            if [[ -z "$chunks" ]]; then
+                log_err "  Failed to create chunks"
+                continue
+            fi
+
+            # Transcribe each chunk
+            transcription_failed=false
+            chunk_files=()
+            for chunk_file in $chunks; do
+                chunk_basename=$(basename "$chunk_file" .mp3)
+                chunk_output="${output_base}_${chunk_basename##*_}"  # Extract partN from filename
+
+                log "  Transcribing chunk: $(basename "$chunk_file")..."
+                if "$PYTHON" -m mlx_audio.stt.generate \
+                    --model "$selected_model" \
+                    --audio "$chunk_file" \
+                    --output-path "${chunk_output}" \
+                    --format json \
+                    --max-tokens "$MAX_TOKENS" \
+                    ${context_args[@]+"${context_args[@]}"}; then
+                    log "    ✓ Chunk transcription saved: ${chunk_output}.json"
+                    chunk_files+=("$chunk_file")
+                else
+                    log_err "    Chunk transcription failed"
+                    transcription_failed=true
+                    break
+                fi
+            done
+
+            # Clean up chunk files if all transcriptions succeeded
+            if [[ "$transcription_failed" == false ]]; then
+                log "  ✓ All chunks transcribed successfully"
+                for chunk_file in "${chunk_files[@]}"; do
+                    rm -f "$chunk_file"
+                    log "  ✓ Cleaned up: $(basename "$chunk_file")"
+                done
+
+                # Move original audio to NAS
+                if [ -d "$NAS_RECORDINGS" ]; then
+                    mv "$audio_file" "$NAS_RECORDINGS/"
+                    log "  ✓ Moved to NAS: $filename"
+                else
+                    log "  ⚠ NAS not mounted, keeping files locally"
+                fi
+            else
+                log_err "  Some chunks failed to transcribe, keeping all files"
+                continue
+            fi
+        else
+            # Medium audio (10-30 min): Transcribe original file directly, no conversion
+            log "  Transcribing original file with ${selected_model##*/} (no conversion)..."
+            if "$PYTHON" -m mlx_audio.stt.generate \
+                --model "$selected_model" \
+                --audio "$audio_file" \
+                --output-path "${output_base}" \
+                --format json \
+                --max-tokens "$MAX_TOKENS" \
+                ${context_args[@]+"${context_args[@]}"}; then
+                log "  ✓ Transcription saved: ${output_base}.json"
+
+                # Move audio file to NAS after successful transcription
+                if [ -d "$NAS_RECORDINGS" ]; then
+                    mv "$audio_file" "$NAS_RECORDINGS/"
+                    log "  ✓ Moved to NAS: $filename"
+                else
+                    log "  ⚠ NAS not mounted, keeping files locally"
+                fi
+            else
+                log_err "  Transcription failed"
+                continue
+            fi
         fi
     fi
 
