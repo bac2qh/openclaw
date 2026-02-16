@@ -6,7 +6,7 @@
 #
 # Usage: curl -fsSL <url>/vm-setup.sh | bash
 #        or: ./vm-setup.sh
-#        or: OPENCLAW_STATE_DIR=~/.openclaw-wife ./vm-setup.sh  # For second user
+#        or: OPENCLAW_STATE_DIR=~/.openclaw-zhuoyue ./vm-setup.sh  # For second user
 #
 # Environment variables:
 #   OPENCLAW_STATE_DIR - OpenClaw state directory (default: ~/.openclaw)
@@ -70,10 +70,10 @@ mkdir -p "${OPENCLAW_STATE_DIR}/workspace/memory"
 mkdir -p "${OPENCLAW_STATE_DIR}/media"
 
 # Check for shared folder (user-specific paths expected)
-# Note: For multi-user setup, symlink to /Volumes/My Shared Files/{USER_PROFILE}/...
+# Note: For multi-user setup, symlink to /Volumes/My Shared Files/xin/ (or zhuoyue/)...
 echo "Note: After setup, create symlinks to shared folders:"
-echo "  ln -s '/Volumes/My Shared Files/{USER_PROFILE}/media/inbound' ${OPENCLAW_STATE_DIR}/media/inbound"
-echo "  ln -s '/Volumes/My Shared Files/{USER_PROFILE}/workspace' ${OPENCLAW_STATE_DIR}/workspace"
+echo "  ln -s '/Volumes/My Shared Files/xin/media/inbound' ${OPENCLAW_STATE_DIR}/media/inbound"
+echo "  ln -s '/Volumes/My Shared Files/xin/workspace' ${OPENCLAW_STATE_DIR}/workspace"
 
 # Create initial memory file
 if [ ! -f "${OPENCLAW_STATE_DIR}/workspace/MEMORY.md" ]; then

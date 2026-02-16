@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Auto-transcription LaunchAgent for macOS (Zhuoyue's profile)
+
+  This plist watches ~/openclaw/zhuoyue/media/inbound/ for new files and triggers transcription.
+
+  Installation:
+    1. Copy to ~/Library/LaunchAgents/com.user.transcribe-zhuoyue.plist
+    2. IMPORTANT: Update the hardcoded paths below to match your macOS username:
+       - Line 28: /Users/xin.ding/openclaw/scripts/knowledge-base/zhuoyue/transcribe.sh
+       - Line 34: /Users/xin.ding/openclaw/zhuoyue/media/inbound
+    3. Load with: launchctl load ~/Library/LaunchAgents/com.user.transcribe-zhuoyue.plist
+
+  Uninstall:
+    launchctl unload ~/Library/LaunchAgents/com.user.transcribe-zhuoyue.plist
+    rm ~/Library/LaunchAgents/com.user.transcribe-zhuoyue.plist
+
+  Logs:
+    tail -f /tmp/transcribe-zhuoyue.log
+    tail -f /tmp/transcribe-zhuoyue.err
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.user.transcribe-zhuoyue</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>/Users/xin.ding/openclaw/scripts/knowledge-base/zhuoyue/transcribe.sh</string>
+    </array>
+
+    <!-- Watch for new files in zhuoyue's inbound folder -->
+    <key>WatchPaths</key>
+    <array>
+        <string>/Users/xin.ding/openclaw/zhuoyue/media/inbound</string>
+    </array>
+
+    <!-- Environment variables -->
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+    </dict>
+
+    <!-- Logging -->
+    <key>StandardOutPath</key>
+    <string>/tmp/transcribe-zhuoyue.log</string>
+    <key>StandardErrorPath</key>
+    <string>/tmp/transcribe-zhuoyue.err</string>
+
+    <!-- Keep alive (restart if crashes) -->
+    <key>KeepAlive</key>
+    <false/>
+
+    <!-- Run at load (optional) -->
+    <key>RunAtLoad</key>
+    <false/>
+</dict>
+</plist>

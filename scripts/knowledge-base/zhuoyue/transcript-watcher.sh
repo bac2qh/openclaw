@@ -7,7 +7,6 @@
 # Watches the shared transcripts folder where host mlx-audio writes transcripts
 #
 # Environment variables:
-#   USER_PROFILE - User profile name (default: xin)
 #   TELEGRAM_CHAT_ID - Telegram chat ID (required)
 #   AGENT_ID - Agent ID for long transcripts (default: transcript-processor)
 #   DURATION_THRESHOLD - Duration threshold in seconds (default: 600)
@@ -15,16 +14,9 @@
 
 set -uo pipefail
 
-USER_PROFILE="${USER_PROFILE:-xin}"
 
-# Validate USER_PROFILE contains only safe characters
-if [[ ! "$USER_PROFILE" =~ ^[a-zA-Z0-9_-]+$ ]]; then
-    echo "ERROR: USER_PROFILE must contain only alphanumeric characters, hyphens, and underscores" >&2
-    exit 1
-fi
-
-TRANSCRIPTS_DIR="/Volumes/My Shared Files/${USER_PROFILE}/transcripts"
-PROCESSED_DIR="/Volumes/My Shared Files/${USER_PROFILE}/transcripts/processed"
+TRANSCRIPTS_DIR="/Volumes/My Shared Files/zhuoyue/transcripts"
+PROCESSED_DIR="/Volumes/My Shared Files/zhuoyue/transcripts/processed"
 TELEGRAM_CHAT_ID="${TELEGRAM_CHAT_ID:-YOUR_CHAT_ID}"
 AGENT_ID="${AGENT_ID:-transcript-processor}"
 DURATION_THRESHOLD="${DURATION_THRESHOLD:-600}"  # 10 minutes in seconds

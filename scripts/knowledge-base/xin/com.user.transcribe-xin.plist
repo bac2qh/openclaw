@@ -8,7 +8,7 @@
   Installation:
     1. Copy to ~/Library/LaunchAgents/com.user.transcribe-xin.plist
     2. IMPORTANT: Update the hardcoded paths below to match your macOS username:
-       - Line 28: /Users/xin.ding/openclaw/scripts/transcribe.sh
+       - Line 28: /Users/xin.ding/openclaw/scripts/knowledge-base/xin/transcribe.sh
        - Line 34: /Users/xin.ding/openclaw/xin/media/inbound
     3. Load with: launchctl load ~/Library/LaunchAgents/com.user.transcribe-xin.plist
 
@@ -28,7 +28,7 @@
     <key>ProgramArguments</key>
     <array>
         <string>/bin/bash</string>
-        <string>/Users/xin.ding/openclaw/scripts/transcribe.sh</string>
+        <string>/Users/xin.ding/openclaw/scripts/knowledge-base/xin/transcribe.sh</string>
     </array>
 
     <!-- Watch for new files in xin's inbound folder -->
@@ -42,8 +42,6 @@
     <dict>
         <key>PATH</key>
         <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
-        <key>USER_PROFILE</key>
-        <string>xin</string>
     </dict>
 
     <!-- Logging -->

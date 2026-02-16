@@ -1,7 +1,7 @@
 #!/bin/bash
 # Transcribe audio files with mlx-audio (VibeVoice-ASR) or remote GPU
 #
-# This script monitors ~/openclaw/{USER_PROFILE}/media/inbound/ for new audio files and transcribes them
+# This script monitors ~/openclaw/xin/media/inbound/ for new audio files and transcribes them
 # using either local mlx-audio (short recordings <=10 min) or remote Ubuntu GPU box (long recordings >10 min).
 #
 # Short recordings (<=10 min): Local whisper-turbo on Mac
@@ -9,9 +9,9 @@
 # Long recordings (>30 min): Split into chunks, stage to NAS, transcribe each chunk on GPU
 #
 # Data flow: Audio staged to NAS → Ubuntu transcribes, writes JSON to NAS → Mac copies JSON
-# from NAS to ~/openclaw/{USER_PROFILE}/transcripts/ → rsync syncs transcripts to Google Drive
+# from NAS to ~/openclaw/xin/transcripts/ → rsync syncs transcripts to Google Drive
 #
-# Transcripts are saved to ~/openclaw/{USER_PROFILE}/transcripts/ (shared with VM), then synced to Google Drive.
+# Transcripts are saved to ~/openclaw/xin/transcripts/ (shared with VM), then synced to Google Drive.
 # After successful transcription, audio files are moved to NAS for archival.
 #
 # Supported input formats: ogg, m4a (Telegram voice/audio messages)
@@ -19,12 +19,11 @@
 # Long files (>10 min) skip conversion on Mac — remote GPU handles original format or MP3 chunks.
 #
 # Usage:
-#   1. Drop audio files into ~/openclaw/{USER_PROFILE}/media/inbound/
-#   2. Run manually: USER_PROFILE=xin ~/openclaw/scripts/transcribe.sh
+#   1. Drop audio files into ~/openclaw/xin/media/inbound/
+#   2. Run manually: ~/openclaw/scripts/knowledge-base/xin/transcribe.sh
 #   3. Or auto-run via launchd (see setup guide)
 #
 # Environment variables:
-#   USER_PROFILE - User profile name (default: xin)
 #   REMOTE_ENABLED - Enable remote GPU transcription (default: true)
 #   REMOTE_MAC_ADDR - Ubuntu MAC address for WOL
 #   REMOTE_HOST - SSH hostname for Ubuntu GPU box
@@ -42,24 +41,16 @@ set -euo pipefail
 # Timestamp all stderr output (for launchd error log)
 exec 2> >(while IFS= read -r line; do printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$line"; done >&2)
 
-# User profile
-USER_PROFILE="${USER_PROFILE:-xin}"
 
-# Validate USER_PROFILE contains only safe characters
-if [[ ! "$USER_PROFILE" =~ ^[a-zA-Z0-9_-]+$ ]]; then
-    echo "ERROR: USER_PROFILE must contain only alphanumeric characters, hyphens, and underscores" >&2
-    exit 1
-fi
-
-BASE_DIR="${HOME}/openclaw/${USER_PROFILE}"
+BASE_DIR="${HOME}/openclaw/xin"
 
 # Configuration
 PYTHON="${HOME}/openclaw/scripts/.venv/bin/python"   # shared
 INPUT_DIR="${BASE_DIR}/media/inbound"
 OUTPUT_DIR="${BASE_DIR}/transcripts"
-GDRIVE_TRANSCRIPTS="${HOME}/Insync/bac2qh@gmail.com/Google Drive/openclaw/${USER_PROFILE}/transcripts"
-GDRIVE_WORKSPACE="${HOME}/Insync/bac2qh@gmail.com/Google Drive/openclaw/${USER_PROFILE}/workspace"
-NAS_RECORDINGS="/Volumes/NAS_1/${USER_PROFILE}/openclaw/media/recordings"
+GDRIVE_TRANSCRIPTS="${HOME}/Insync/bac2qh@gmail.com/Google Drive/openclaw/xin/transcripts"
+GDRIVE_WORKSPACE="${HOME}/Insync/bac2qh@gmail.com/Google Drive/openclaw/xin/workspace"
+NAS_RECORDINGS="/Volumes/NAS_1/xin/openclaw/media/recordings"
 FAST_MODEL="mlx-community/whisper-large-v3-turbo-asr-fp16"
 FULL_MODEL="mlx-community/VibeVoice-ASR-bf16"
 MODEL_THRESHOLD=600  # Use FULL_MODEL if audio > 10 minutes (in seconds)
@@ -85,7 +76,7 @@ REMOTE_BOOT_POLL_INTERVAL=5
 
 # NAS paths (differ per OS)
 NAS_MAC_BASE="${NAS_MAC_BASE:-/Volumes/NAS_1}"
-NAS_STAGING="${NAS_MAC_BASE}/${USER_PROFILE}/openclaw/media/staging"
+NAS_STAGING="${NAS_MAC_BASE}/xin/openclaw/media/staging"
 NAS_REMOTE_BASE="${NAS_REMOTE_BASE:-/mnt/nas}"            # Ubuntu mount point
 
 # Docker config
@@ -220,7 +211,7 @@ run_remote_transcription() {
     local hotwords="$3"         # optional context
 
     # Build remote paths (Ubuntu perspective)
-    local remote_staging="${NAS_REMOTE_BASE}/${USER_PROFILE}/openclaw/media/staging"
+    local remote_staging="${NAS_REMOTE_BASE}/xin/openclaw/media/staging"
     local remote_audio="${remote_staging}/${staged_filename}"
     local remote_output="${remote_staging}/output/${output_basename}"
 

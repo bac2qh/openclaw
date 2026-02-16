@@ -3,26 +3,17 @@
 #
 # Run this on your Mac (host machine) to install transcription tools.
 #
-# Usage: USER_PROFILE=xin ./host-setup.sh
+# Usage: ~/openclaw/scripts/knowledge-base/xin/host-setup.sh
 #
 # Environment variables:
-#   USER_PROFILE - User profile name (default: xin)
 
 set -euo pipefail
 
-# User profile
-USER_PROFILE="${USER_PROFILE:-xin}"
 
-# Validate USER_PROFILE contains only safe characters
-if [[ ! "$USER_PROFILE" =~ ^[a-zA-Z0-9_-]+$ ]]; then
-    echo "ERROR: USER_PROFILE must contain only alphanumeric characters, hyphens, and underscores" >&2
-    exit 1
-fi
-
-BASE_DIR="${HOME}/openclaw/${USER_PROFILE}"
+BASE_DIR="${HOME}/openclaw/xin"
 
 echo "=== Personal Knowledge Base - Host Setup ==="
-echo "User profile: $USER_PROFILE"
+echo "User profile: xin"
 echo ""
 
 # Check for Homebrew
@@ -61,23 +52,23 @@ mkdir -p "${BASE_DIR}/config"
 
 # Google Drive (synced to cloud) - workspace + transcripts
 echo "  Creating Google Drive folders..."
-mkdir -p ~/Insync/bac2qh@gmail.com/Google\ Drive/openclaw/${USER_PROFILE}/workspace
-mkdir -p ~/Insync/bac2qh@gmail.com/Google\ Drive/openclaw/${USER_PROFILE}/transcripts
+mkdir -p ~/Insync/bac2qh@gmail.com/Google\ Drive/openclaw/xin/workspace
+mkdir -p ~/Insync/bac2qh@gmail.com/Google\ Drive/openclaw/xin/transcripts
 
 # NAS (archival - audio only, staging for remote GPU)
 echo "  Creating NAS folders..."
 if [ -d /Volumes/NAS_1 ]; then
-    mkdir -p /Volumes/NAS_1/${USER_PROFILE}/openclaw/media/recordings
-    mkdir -p /Volumes/NAS_1/${USER_PROFILE}/openclaw/media/staging
-    mkdir -p /Volumes/NAS_1/${USER_PROFILE}/openclaw/media/staging/output
+    mkdir -p /Volumes/NAS_1/xin/openclaw/media/recordings
+    mkdir -p /Volumes/NAS_1/xin/openclaw/media/staging
+    mkdir -p /Volumes/NAS_1/xin/openclaw/media/staging/output
     echo "  ✓ NAS folders created:"
     echo "    - recordings/ (audio archival)"
     echo "    - staging/ (remote GPU input/output)"
 else
     echo "  ⚠ NAS not mounted at /Volumes/NAS_1. Skipping NAS folders."
     echo "  Mount your NAS and run:"
-    echo "    mkdir -p /Volumes/NAS_1/${USER_PROFILE}/openclaw/media/recordings"
-    echo "    mkdir -p /Volumes/NAS_1/${USER_PROFILE}/openclaw/media/staging/output"
+    echo "    mkdir -p /Volumes/NAS_1/xin/openclaw/media/recordings"
+    echo "    mkdir -p /Volumes/NAS_1/xin/openclaw/media/staging/output"
 fi
 
 # Scripts directory
@@ -114,12 +105,12 @@ echo "=== Setup Complete ==="
 echo ""
 echo "Test transcription:"
 echo "  say 'Hello world' -o ${BASE_DIR}/media/inbound/test.aiff"
-echo "  USER_PROFILE=${USER_PROFILE} ~/openclaw/scripts/transcribe.sh"
-echo "  cat ~/Insync/bac2qh@gmail.com/Google\\ Drive/openclaw/${USER_PROFILE}/transcripts/*test*.json"
+echo "  ~/openclaw/scripts/knowledge-base/xin/transcribe.sh"
+echo "  cat ~/Insync/bac2qh@gmail.com/Google\\ Drive/openclaw/xin/transcripts/*test*.json"
 echo ""
 echo "For auto-transcription, install the launchd plist:"
-echo "  cp scripts/knowledge-base/com.user.transcribe-${USER_PROFILE}.plist ~/Library/LaunchAgents/"
-echo "  launchctl load ~/Library/LaunchAgents/com.user.transcribe-${USER_PROFILE}.plist"
+echo "  cp scripts/knowledge-base/xin/com.user.transcribe-xin.plist ~/Library/LaunchAgents/"
+echo "  launchctl load ~/Library/LaunchAgents/com.user.transcribe-xin.plist"
 echo ""
 echo "Note: Audio files moved to NAS and transcripts saved to Google Drive after transcription"
 echo ""
@@ -133,7 +124,7 @@ echo "   - Build Docker image: docker build -t vibevoice-asr:latest /path/to/doc
 echo "   - Mount NAS at /mnt/nas (same NAS as Mac)"
 echo "   - Enable passwordless sudo for systemctl suspend:"
 echo "     sudo visudo"
-echo "     # Add: ${USER_PROFILE} ALL=(ALL) NOPASSWD: /bin/systemctl suspend"
+echo "     # Add: xin ALL=(ALL) NOPASSWD: /bin/systemctl suspend"
 echo "   - Enable Wake-on-LAN in BIOS/UEFI"
 echo "   - Get MAC address: ip link show"
 echo ""
@@ -141,11 +132,11 @@ echo "2. On Mac, set environment variables before running transcribe.sh:"
 echo "   export REMOTE_ENABLED=true"
 echo "   export REMOTE_MAC_ADDR=AA:BB:CC:DD:EE:FF  # Ubuntu MAC address"
 echo "   export REMOTE_HOST=gpu-box                # SSH hostname or IP"
-echo "   export REMOTE_USER=${USER_PROFILE}"
+echo "   export REMOTE_USER=xin"
 echo "   export REMOTE_SSH_PORT=22"
 echo ""
 echo "3. Test WOL and SSH:"
 echo "   wakeonlan AA:BB:CC:DD:EE:FF"
 echo "   sleep 30"
-echo "   ssh ${USER_PROFILE}@gpu-box 'docker run --rm --gpus all nvidia/cuda:12.0-base nvidia-smi'"
+echo "   ssh xin@gpu-box 'docker run --rm --gpus all nvidia/cuda:12.0-base nvidia-smi'"
 echo ""
