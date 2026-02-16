@@ -31,9 +31,9 @@ if ! command -v brew &> /dev/null; then
     /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 fi
 
-# Install ffmpeg
-echo "Installing ffmpeg..."
-brew install ffmpeg
+# Install ffmpeg and wakeonlan
+echo "Installing ffmpeg and wakeonlan..."
+brew install ffmpeg wakeonlan
 
 # Install mlx-audio
 echo "Installing mlx-audio..."
@@ -64,15 +64,20 @@ echo "  Creating Google Drive folders..."
 mkdir -p ~/Insync/bac2qh@gmail.com/Google\ Drive/openclaw/${USER_PROFILE}/workspace
 mkdir -p ~/Insync/bac2qh@gmail.com/Google\ Drive/openclaw/${USER_PROFILE}/transcripts
 
-# NAS (archival - audio only)
-echo "  Creating NAS archival folder..."
+# NAS (archival - audio only, staging for remote GPU)
+echo "  Creating NAS folders..."
 if [ -d /Volumes/NAS_1 ]; then
     mkdir -p /Volumes/NAS_1/${USER_PROFILE}/openclaw/media/recordings
-    echo "  ✓ NAS folder created (audio files will be moved here after transcription)"
+    mkdir -p /Volumes/NAS_1/${USER_PROFILE}/openclaw/media/staging
+    mkdir -p /Volumes/NAS_1/${USER_PROFILE}/openclaw/media/staging/output
+    echo "  ✓ NAS folders created:"
+    echo "    - recordings/ (audio archival)"
+    echo "    - staging/ (remote GPU input/output)"
 else
-    echo "  ⚠ NAS not mounted at /Volumes/NAS_1. Skipping NAS folder."
+    echo "  ⚠ NAS not mounted at /Volumes/NAS_1. Skipping NAS folders."
     echo "  Mount your NAS and run:"
     echo "    mkdir -p /Volumes/NAS_1/${USER_PROFILE}/openclaw/media/recordings"
+    echo "    mkdir -p /Volumes/NAS_1/${USER_PROFILE}/openclaw/media/staging/output"
 fi
 
 # Scripts directory
@@ -117,4 +122,30 @@ echo "  cp scripts/knowledge-base/com.user.transcribe-${USER_PROFILE}.plist ~/Li
 echo "  launchctl load ~/Library/LaunchAgents/com.user.transcribe-${USER_PROFILE}.plist"
 echo ""
 echo "Note: Audio files moved to NAS and transcripts saved to Google Drive after transcription"
+echo ""
+echo "=== Remote GPU Transcription Setup ==="
+echo ""
+echo "To enable remote GPU transcription for long recordings (>10 min):"
+echo ""
+echo "1. On Ubuntu GPU box:"
+echo "   - Install Docker with NVIDIA GPU support"
+echo "   - Build Docker image: docker build -t vibevoice-asr:latest /path/to/dockerfile"
+echo "   - Mount NAS at /mnt/nas (same NAS as Mac)"
+echo "   - Enable passwordless sudo for systemctl suspend:"
+echo "     sudo visudo"
+echo "     # Add: ${USER_PROFILE} ALL=(ALL) NOPASSWD: /bin/systemctl suspend"
+echo "   - Enable Wake-on-LAN in BIOS/UEFI"
+echo "   - Get MAC address: ip link show"
+echo ""
+echo "2. On Mac, set environment variables before running transcribe.sh:"
+echo "   export REMOTE_ENABLED=true"
+echo "   export REMOTE_MAC_ADDR=AA:BB:CC:DD:EE:FF  # Ubuntu MAC address"
+echo "   export REMOTE_HOST=gpu-box                # SSH hostname or IP"
+echo "   export REMOTE_USER=${USER_PROFILE}"
+echo "   export REMOTE_SSH_PORT=22"
+echo ""
+echo "3. Test WOL and SSH:"
+echo "   wakeonlan AA:BB:CC:DD:EE:FF"
+echo "   sleep 30"
+echo "   ssh ${USER_PROFILE}@gpu-box 'docker run --rm --gpus all nvidia/cuda:12.0-base nvidia-smi'"
 echo ""
