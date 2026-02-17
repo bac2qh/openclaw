@@ -65,7 +65,7 @@ The system supports multiple users on the same Mac host and VM. Each user gets i
 Route Telegram messages to per-user agents using the `bindings` config. Each user's DMs go to a dedicated agent with an isolated workspace and memory database.
 
 ```yaml
-# ~/.openclaw/config.yml
+# ~/.openclaw-xin/openclaw.json (path depends on OPENCLAW_STATE_DIR)
 bindings:
   - agentId: "xin"
     match:
@@ -87,6 +87,9 @@ session:
 **CLI equivalent:**
 
 ```bash
+# Set OPENCLAW_STATE_DIR for all commands targeting a per-user instance
+export OPENCLAW_STATE_DIR=~/.openclaw-xin
+
 openclaw config set bindings '[
   {
     "agentId": "xin",
@@ -118,6 +121,73 @@ OPENCLAW_STATE_DIR=~/.openclaw-zhuoyue \
   nohup openclaw gateway run --bind loopback --port 18790 --force \
   > /tmp/openclaw-gateway-zhuoyue.log 2>&1 &
 ```
+
+### Using CLI with Per-User State
+
+`OPENCLAW_STATE_DIR` must be set for **every** `openclaw` command — not just `gateway run`. Without it, commands default to `~/.openclaw/` and create state in the wrong location.
+
+**Option 1: Export for the session**
+
+```bash
+export OPENCLAW_STATE_DIR=~/.openclaw-xin
+
+# Now all commands target the correct state directory
+openclaw agents add xin --workspace ~/.openclaw-xin/workspace
+openclaw config set providers.moonshot.apiKey "sk-..."
+openclaw memory index --force
+```
+
+**Option 2: Shell alias**
+
+```bash
+# Add to ~/.bashrc or ~/.zshrc
+alias oc-xin='OPENCLAW_STATE_DIR=~/.openclaw-xin openclaw'
+alias oc-zhuoyue='OPENCLAW_STATE_DIR=~/.openclaw-zhuoyue openclaw'
+
+# Usage
+oc-xin agents list
+oc-xin memory status
+```
+
+### Migrating from Single-User Setup
+
+If you already have a working `~/.openclaw/` directory and want to switch to per-user state:
+
+```bash
+# 1. Stop the gateway
+pkill -f "openclaw gateway"
+
+# 2. Rename the state directory
+mv ~/.openclaw ~/.openclaw-xin
+
+# 3. Export state dir for remaining commands
+export OPENCLAW_STATE_DIR=~/.openclaw-xin
+
+# 4. Create the new agent (copies auth from "main" automatically)
+cp ~/.openclaw-xin/agents/main/agent/auth-profiles.json /tmp/auth-profiles.json
+openclaw agents add xin --workspace ~/.openclaw-xin/workspace
+cp /tmp/auth-profiles.json ~/.openclaw-xin/agents/xin/agent/auth-profiles.json
+
+# 5. Delete the old "main" agent
+rm -rf ~/.openclaw-xin/agents/main
+
+# 6. Reindex memory
+openclaw memory index --force
+
+# 7. Update VM symlinks
+rm -f ~/.openclaw-xin/media/inbound
+ln -s "/Volumes/My Shared Files/xin/media/inbound" ~/.openclaw-xin/media/inbound
+rm -f ~/.openclaw-xin/workspace
+ln -s "/Volumes/My Shared Files/xin/workspace" ~/.openclaw-xin/workspace
+
+# 8. Restart gateway
+OPENCLAW_STATE_DIR=~/.openclaw-xin \
+  nohup openclaw gateway run --bind loopback --port 18789 --force \
+  > /tmp/openclaw-gateway-xin.log 2>&1 &
+```
+
+**What's preserved:** config, credentials (via auth-profiles.json copy), workspace files, transcripts
+**What's lost:** conversation history (session state), memory embeddings (rebuilt by reindex)
 
 ---
 
