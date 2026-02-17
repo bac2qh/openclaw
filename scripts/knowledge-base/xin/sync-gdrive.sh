@@ -24,11 +24,12 @@ LOG_DIR="${BASE_DIR}/logs"
 # Create logs directory
 mkdir -p "$LOG_DIR"
 
-# Redirect stdout to log file with timestamps
-exec 1> >(while IFS= read -r line; do printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$line"; done >> "$LOG_DIR/sync-gdrive.log")
+# Redirect stdout to log file with timestamps (tee to terminal and log)
+exec 3>&1 4>&2
+exec 1> >(while IFS= read -r line; do printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$line"; done | tee -a "$LOG_DIR/sync-gdrive.log" >&3)
 
-# Redirect stderr to error log with timestamps
-exec 2> >(while IFS= read -r line; do printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$line"; done >> "$LOG_DIR/sync-gdrive.err")
+# Redirect stderr to error log with timestamps (tee to terminal and log)
+exec 2> >(while IFS= read -r line; do printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$line"; done | tee -a "$LOG_DIR/sync-gdrive.err" >&4)
 
 # Configuration
 TRANSCRIPTS_DIR="${BASE_DIR}/transcripts"
