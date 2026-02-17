@@ -637,16 +637,16 @@ while true; do
         echo ""
         log "Syncing to Google Drive..."
 
-        # Sync transcripts (with safety limit on deletions)
-        if rsync -av --delete --max-delete=10 "$OUTPUT_DIR/" "$GDRIVE_TRANSCRIPTS/"; then
+        # Sync transcripts (additive only, no deletions)
+        if rsync -av "$OUTPUT_DIR/" "$GDRIVE_TRANSCRIPTS/"; then
             log "  ✓ Transcripts synced to Google Drive"
         else
             log_err "  ⚠ Warning: Failed to sync transcripts to Google Drive"
         fi
 
-        # Sync workspace (if it exists, with safety limit on deletions)
+        # Sync workspace (if it exists, additive only, no deletions)
         if [ -d "${BASE_DIR}/workspace" ]; then
-            if rsync -av --delete --max-delete=10 "${BASE_DIR}/workspace/" "$GDRIVE_WORKSPACE/"; then
+            if rsync -av "${BASE_DIR}/workspace/" "$GDRIVE_WORKSPACE/"; then
                 log "  ✓ Workspace synced to Google Drive"
             else
                 log_err "  ⚠ Warning: Failed to sync workspace to Google Drive"
