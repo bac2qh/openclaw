@@ -1,0 +1,17 @@
+[Unit]
+Description=OpenClaw GPU Transcription Worker
+After=network-online.target remote-fs.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/opt/openclaw/transcribe-worker.sh
+Restart=on-failure
+RestartSec=10
+User=xin
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=transcribe-worker
+
+[Install]
+WantedBy=multi-user.target

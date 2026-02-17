@@ -1,24 +1,26 @@
 #!/bin/bash
-# Sync transcripts and workspace to Google Drive
+# Sync NAS transcripts and Google Drive
 #
-# This script polls every 120 seconds and syncs:
-# - ~/openclaw/zhuoyue/transcripts/ → Google Drive transcripts
-# - ~/openclaw/zhuoyue/workspace/ → Google Drive workspace
+# This script polls every 120 seconds and:
+# 1. Pulls completed transcripts from NAS staging output → local transcripts/
+# 2. Syncs local transcripts/ → Google Drive transcripts
+# 3. Syncs local workspace/ → Google Drive workspace
 #
 # Uses rsync -av (additive only, no --delete) to prevent data loss.
 #
 # Usage:
-#   Run as daemon in tmux: tmux new-session -d -s sync-gdrive-zhuoyue '~/openclaw/scripts/knowledge-base/zhuoyue/sync-gdrive.sh'
+#   Run as daemon in tmux: tmux new-session -d -s sync-xin '~/openclaw/scripts/knowledge-base/xin/sync.sh'
 #
 # Requirements:
 #   - rsync (built-in on macOS)
+#   - NAS mounted at /Volumes/NAS_1 (required for transcript collection)
 #   - Insync (Google Drive) mounted at ~/Insync/bac2qh@gmail.com/Google Drive
 
 set -euo pipefail
 
 trap 'log "Shutting down..."; exit 0' SIGTERM SIGINT
 
-BASE_DIR="${HOME}/openclaw/zhuoyue"
+BASE_DIR="${HOME}/openclaw/xin"
 LOG_DIR="${BASE_DIR}/logs"
 
 # Create logs directory
@@ -26,16 +28,17 @@ mkdir -p "$LOG_DIR"
 
 # Redirect stdout to log file with timestamps (tee to terminal and log)
 exec 3>&1 4>&2
-exec 1> >(while IFS= read -r line; do printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$line"; done | tee -a "$LOG_DIR/sync-gdrive.log" >&3)
+exec 1> >(while IFS= read -r line; do printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$line"; done | tee -a "$LOG_DIR/sync.log" >&3)
 
 # Redirect stderr to error log with timestamps (tee to terminal and log)
-exec 2> >(while IFS= read -r line; do printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$line"; done | tee -a "$LOG_DIR/sync-gdrive.err" >&4)
+exec 2> >(while IFS= read -r line; do printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$line"; done | tee -a "$LOG_DIR/sync.err" >&4)
 
 # Configuration
 TRANSCRIPTS_DIR="${BASE_DIR}/transcripts"
 WORKSPACE_DIR="${BASE_DIR}/workspace"
-GDRIVE_TRANSCRIPTS="${HOME}/Insync/bac2qh@gmail.com/Google Drive/openclaw/zhuoyue/transcripts"
-GDRIVE_WORKSPACE="${HOME}/Insync/bac2qh@gmail.com/Google Drive/openclaw/zhuoyue/workspace"
+GDRIVE_TRANSCRIPTS="${HOME}/Insync/bac2qh@gmail.com/Google Drive/openclaw/xin/transcripts"
+GDRIVE_WORKSPACE="${HOME}/Insync/bac2qh@gmail.com/Google Drive/openclaw/xin/workspace"
+NAS_OUTPUT="/Volumes/NAS_1/xin/openclaw/media/staging/output"
 
 POLL_INTERVAL=120  # seconds between sync cycles
 
@@ -54,14 +57,34 @@ if ! command -v rsync &> /dev/null; then
     exit 1
 fi
 
-log "Google Drive sync daemon started (polling every ${POLL_INTERVAL}s)"
+log "Sync daemon started (polling every ${POLL_INTERVAL}s)"
 
 # Sync loop
 while true; do
+    log "Starting sync cycle..."
+
+    # Pull completed transcripts from NAS
+    if [ -d "$NAS_OUTPUT" ]; then
+        shopt -s nullglob
+        json_files=("$NAS_OUTPUT"/*.json)
+        if [[ ${#json_files[@]} -gt 0 ]]; then
+            log "  Found ${#json_files[@]} transcript(s) on NAS"
+            for json_file in "${json_files[@]}"; do
+                filename=$(basename "$json_file")
+                if cp "$json_file" "$TRANSCRIPTS_DIR/$filename"; then
+                    rm -f "$json_file"
+                    log "  ✓ Collected transcript: $filename"
+                else
+                    log_err "  Failed to collect: $filename"
+                fi
+            done
+        fi
+    else
+        log "  ⚠ NAS output directory not available: $NAS_OUTPUT"
+    fi
+
     # Check if Google Drive directories are available
     if [ -d "$GDRIVE_TRANSCRIPTS" ] && [ -d "$GDRIVE_WORKSPACE" ]; then
-        log "Starting sync cycle..."
-
         # Sync transcripts (additive only, no deletions)
         if [ -d "$TRANSCRIPTS_DIR" ]; then
             if rsync -av "$TRANSCRIPTS_DIR/" "$GDRIVE_TRANSCRIPTS/"; then
@@ -84,10 +107,11 @@ while true; do
             log "  ⚠ Workspace directory not found (will be created when needed): $WORKSPACE_DIR"
         fi
 
-        log "Sync cycle complete."
     else
-        log "  ⚠ Google Drive not available, skipping sync cycle"
+        log "  ⚠ Google Drive not available, skipping Google Drive sync"
     fi
+
+    log "Sync cycle complete."
 
     sleep "$POLL_INTERVAL"
 done
