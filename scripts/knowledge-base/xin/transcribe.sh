@@ -85,7 +85,7 @@ NAS_REMOTE_BASE="${NAS_REMOTE_BASE:-/mnt/nas}"            # Ubuntu mount point
 REMOTE_DOCKER_IMAGE="${REMOTE_DOCKER_IMAGE:-vibevoice-asr:latest}"
 REMOTE_SUSPEND_AFTER="${REMOTE_SUSPEND_AFTER:-true}"
 
-POLL_INTERVAL=10  # seconds between checks when idle
+POLL_INTERVAL=2  # seconds between checks when idle
 
 # Ensure directories exist
 mkdir -p "$INPUT_DIR" "$OUTPUT_DIR"
