@@ -40,11 +40,17 @@ set -euo pipefail
 
 trap 'log "Shutting down..."; exit 0' SIGTERM SIGINT
 
-# Timestamp all stderr output (for launchd error log)
-exec 2> >(while IFS= read -r line; do printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$line"; done >&2)
-
-
 BASE_DIR="${HOME}/openclaw/zhuoyue"
+LOG_DIR="${BASE_DIR}/logs"
+
+# Create logs directory
+mkdir -p "$LOG_DIR"
+
+# Redirect stdout to log file with timestamps
+exec 1> >(while IFS= read -r line; do printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$line"; done >> "$LOG_DIR/transcribe.log")
+
+# Redirect stderr to error log with timestamps
+exec 2> >(while IFS= read -r line; do printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$line"; done >> "$LOG_DIR/transcribe.err")
 
 # Configuration
 PYTHON="${HOME}/openclaw/scripts/.venv/bin/python"   # shared
