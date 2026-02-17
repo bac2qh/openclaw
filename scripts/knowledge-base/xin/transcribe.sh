@@ -632,29 +632,5 @@ while true; do
 
     log "Transcription batch complete."
 
-    # Sync transcripts and workspace to Google Drive
-    if [ -d "$GDRIVE_TRANSCRIPTS" ] && [ -d "$GDRIVE_WORKSPACE" ]; then
-        echo ""
-        log "Syncing to Google Drive..."
-
-        # Sync transcripts (additive only, no deletions)
-        if rsync -av "$OUTPUT_DIR/" "$GDRIVE_TRANSCRIPTS/"; then
-            log "  ✓ Transcripts synced to Google Drive"
-        else
-            log_err "  ⚠ Warning: Failed to sync transcripts to Google Drive"
-        fi
-
-        # Sync workspace (if it exists, additive only, no deletions)
-        if [ -d "${BASE_DIR}/workspace" ]; then
-            if rsync -av "${BASE_DIR}/workspace/" "$GDRIVE_WORKSPACE/"; then
-                log "  ✓ Workspace synced to Google Drive"
-            else
-                log_err "  ⚠ Warning: Failed to sync workspace to Google Drive"
-            fi
-        fi
-    else
-        log "  ⚠ Google Drive not available, skipping cloud sync"
-    fi
-
     sleep 1  # Brief pause before re-checking for new files
 done
