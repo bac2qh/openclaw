@@ -96,7 +96,7 @@ while true; do
         # Sync transcripts (additive only, no deletions)
         if [ -d "$TRANSCRIPTS_DIR" ]; then
             output=$(rsync -rlt --info=stats2 "$TRANSCRIPTS_DIR/" "$GDRIVE_TRANSCRIPTS/" 2>&1 || true)
-            transferred=$(echo "$output" | grep -E 'Number of regular files transferred:' | awk '{print $NF}')
+            transferred=$(echo "$output" | grep -E 'Number of regular files transferred:' | awk '{print $NF}') || true
             if [[ "${transferred:-0}" -gt 0 ]]; then
                 log "  ✓ Transcripts synced to Google Drive ($transferred file(s))"
             fi
@@ -105,7 +105,7 @@ while true; do
         # Sync workspace (if it exists, additive only, no deletions)
         if [ -d "$WORKSPACE_DIR" ]; then
             output=$(rsync -rlt --info=stats2 "$WORKSPACE_DIR/" "$GDRIVE_WORKSPACE/" 2>&1 || true)
-            transferred=$(echo "$output" | grep -E 'Number of regular files transferred:' | awk '{print $NF}')
+            transferred=$(echo "$output" | grep -E 'Number of regular files transferred:' | awk '{print $NF}') || true
             if [[ "${transferred:-0}" -gt 0 ]]; then
                 log "  ✓ Workspace synced to Google Drive ($transferred file(s))"
             fi
