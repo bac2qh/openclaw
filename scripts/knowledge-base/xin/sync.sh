@@ -69,18 +69,20 @@ while true; do
     if [ -d "$NAS_OUTPUT" ]; then
         nas_unavailable_logged=false
         shopt -s nullglob
-        json_files=("$NAS_OUTPUT"/*.json)
-        if [[ ${#json_files[@]} -gt 0 ]]; then
-            log "Found ${#json_files[@]} transcript(s) on NAS"
-            for json_file in "${json_files[@]}"; do
-                filename=$(basename "$json_file")
-                if cp "$json_file" "$TRANSCRIPTS_DIR/$filename"; then
-                    rm -f "$json_file"
-                    log "  ✓ Collected transcript: $filename"
-                else
-                    log_err "  Failed to collect: $filename"
-                fi
-            done
+        collected=0
+        for json_file in "$NAS_OUTPUT"/*.json; do
+            filename=$(basename "$json_file")
+            if cp "$json_file" "$TRANSCRIPTS_DIR/$filename"; then
+                rm -f "$json_file"
+                log "  ✓ Collected transcript: $filename"
+                collected=$((collected + 1))
+            else
+                log_err "  Failed to collect: $filename"
+            fi
+        done
+        shopt -u nullglob
+        if [[ $collected -gt 0 ]]; then
+            log "Collected $collected transcript(s) from NAS"
         fi
     else
         if [ "$nas_unavailable_logged" = false ]; then
