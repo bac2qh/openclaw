@@ -42,10 +42,8 @@ GDRIVE_WORKSPACE="${HOME}/Insync/bac2qh@gmail.com/Google Drive/openclaw/zhuoyue/
 NAS_OUTPUT="/Volumes/NAS_1/zhuoyue/openclaw/media/staging/output"
 
 POLL_INTERVAL=120  # seconds between sync cycles
-HEARTBEAT_INTERVAL=15  # log heartbeat every N cycles (~30 minutes)
 
 # State tracking
-cycle_count=0
 nas_unavailable_logged=false
 
 # Logging helpers
@@ -67,13 +65,6 @@ log "Sync daemon started (polling every ${POLL_INTERVAL}s)"
 
 # Sync loop
 while true; do
-    ((cycle_count++))
-
-    # Periodic heartbeat to show daemon is alive
-    if (( cycle_count % HEARTBEAT_INTERVAL == 0 )); then
-        log "⏱ Heartbeat: Cycle $cycle_count (daemon alive)"
-    fi
-
     # Pull completed transcripts from NAS
     if [ -d "$NAS_OUTPUT" ]; then
         nas_unavailable_logged=false
