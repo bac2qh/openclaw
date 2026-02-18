@@ -6,7 +6,8 @@
 # 2. Syncs local transcripts/ → Google Drive transcripts
 # 3. Syncs local workspace/ → Google Drive workspace
 #
-# Uses rsync -av (additive only, no --delete) to prevent data loss.
+# Uses rsync -rlt (additive only, no --delete) to prevent data loss.
+# Skips metadata (permissions/owner/group) that Google Drive doesn't preserve.
 #
 # Usage:
 #   Run as daemon in tmux: tmux new-session -d -s sync-zhuoyue '~/openclaw/scripts/knowledge-base/zhuoyue/sync.sh'
@@ -41,6 +42,11 @@ GDRIVE_WORKSPACE="${HOME}/Insync/bac2qh@gmail.com/Google Drive/openclaw/zhuoyue/
 NAS_OUTPUT="/Volumes/NAS_1/zhuoyue/openclaw/media/staging/output"
 
 POLL_INTERVAL=120  # seconds between sync cycles
+HEARTBEAT_INTERVAL=15  # log heartbeat every N cycles (~30 minutes)
+
+# State tracking
+cycle_count=0
+nas_unavailable_logged=false
 
 # Logging helpers
 log() {
@@ -61,14 +67,20 @@ log "Sync daemon started (polling every ${POLL_INTERVAL}s)"
 
 # Sync loop
 while true; do
-    log "Starting sync cycle..."
+    ((cycle_count++))
+
+    # Periodic heartbeat to show daemon is alive
+    if (( cycle_count % HEARTBEAT_INTERVAL == 0 )); then
+        log "⏱ Heartbeat: Cycle $cycle_count (daemon alive)"
+    fi
 
     # Pull completed transcripts from NAS
     if [ -d "$NAS_OUTPUT" ]; then
+        nas_unavailable_logged=false
         shopt -s nullglob
         json_files=("$NAS_OUTPUT"/*.json)
         if [[ ${#json_files[@]} -gt 0 ]]; then
-            log "  Found ${#json_files[@]} transcript(s) on NAS"
+            log "Found ${#json_files[@]} transcript(s) on NAS"
             for json_file in "${json_files[@]}"; do
                 filename=$(basename "$json_file")
                 if cp "$json_file" "$TRANSCRIPTS_DIR/$filename"; then
@@ -80,38 +92,32 @@ while true; do
             done
         fi
     else
-        log "  ⚠ NAS output directory not available: $NAS_OUTPUT"
+        if [ "$nas_unavailable_logged" = false ]; then
+            log "⚠ NAS output directory not available: $NAS_OUTPUT"
+            nas_unavailable_logged=true
+        fi
     fi
 
     # Check if Google Drive directories are available
     if [ -d "$GDRIVE_TRANSCRIPTS" ] && [ -d "$GDRIVE_WORKSPACE" ]; then
         # Sync transcripts (additive only, no deletions)
         if [ -d "$TRANSCRIPTS_DIR" ]; then
-            if rsync -av "$TRANSCRIPTS_DIR/" "$GDRIVE_TRANSCRIPTS/"; then
-                log "  ✓ Transcripts synced to Google Drive"
-            else
-                log_err "  ⚠ Warning: Failed to sync transcripts to Google Drive"
+            output=$(rsync -rlt --info=stats2 "$TRANSCRIPTS_DIR/" "$GDRIVE_TRANSCRIPTS/" 2>&1 || true)
+            transferred=$(echo "$output" | grep -E 'Number of regular files transferred:' | awk '{print $NF}')
+            if [[ "${transferred:-0}" -gt 0 ]]; then
+                log "  ✓ Transcripts synced to Google Drive ($transferred file(s))"
             fi
-        else
-            log "  ⚠ Transcripts directory not found: $TRANSCRIPTS_DIR"
         fi
 
         # Sync workspace (if it exists, additive only, no deletions)
         if [ -d "$WORKSPACE_DIR" ]; then
-            if rsync -av "$WORKSPACE_DIR/" "$GDRIVE_WORKSPACE/"; then
-                log "  ✓ Workspace synced to Google Drive"
-            else
-                log_err "  ⚠ Warning: Failed to sync workspace to Google Drive"
+            output=$(rsync -rlt --info=stats2 "$WORKSPACE_DIR/" "$GDRIVE_WORKSPACE/" 2>&1 || true)
+            transferred=$(echo "$output" | grep -E 'Number of regular files transferred:' | awk '{print $NF}')
+            if [[ "${transferred:-0}" -gt 0 ]]; then
+                log "  ✓ Workspace synced to Google Drive ($transferred file(s))"
             fi
-        else
-            log "  ⚠ Workspace directory not found (will be created when needed): $WORKSPACE_DIR"
         fi
-
-    else
-        log "  ⚠ Google Drive not available, skipping Google Drive sync"
     fi
-
-    log "Sync cycle complete."
 
     sleep "$POLL_INTERVAL"
 done
