@@ -47,7 +47,7 @@ scripts/knowledge-base/zhuoyue/host-setup.sh
 - `~/openclaw/zhuoyue/workspace/` - Markdown files (synced to Google Drive)
 - `~/openclaw/zhuoyue/config/` - Hotwords and config files
 - `~/Insync/bac2qh@gmail.com/Google Drive/openclaw/zhuoyue/` - Cloud backup
-- `/Volumes/NAS_1/zhuoyue/openclaw/media/recordings/` - Audio archival (if NAS mounted)
+- `/Volumes/NAS_1/Zhuoyue/openclaw/media/recordings/` - Audio archival (if NAS mounted)
 
 ### 1.2 Create Initial MEMORY.md
 
@@ -137,7 +137,7 @@ cat ~/openclaw/zhuoyue/transcripts/*test*.json
 ls ~/Insync/bac2qh@gmail.com/Google\ Drive/openclaw/zhuoyue/transcripts/
 
 # Check audio moved to NAS (if mounted)
-ls /Volumes/NAS_1/zhuoyue/openclaw/media/recordings/
+ls /Volumes/NAS_1/Zhuoyue/openclaw/media/recordings/
 ```
 
 **Expected behavior:**

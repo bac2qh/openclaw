@@ -58,17 +58,17 @@ mkdir -p ~/Insync/bac2qh@gmail.com/Google\ Drive/openclaw/xin/transcripts
 # NAS (archival - audio only, staging for remote GPU)
 echo "  Creating NAS folders..."
 if [ -d /Volumes/NAS_1 ]; then
-    mkdir -p /Volumes/NAS_1/xin/openclaw/media/recordings
-    mkdir -p /Volumes/NAS_1/xin/openclaw/media/staging
-    mkdir -p /Volumes/NAS_1/xin/openclaw/media/staging/output
+    mkdir -p /Volumes/NAS_1/Xin/openclaw/media/recordings
+    mkdir -p /Volumes/NAS_1/Xin/openclaw/media/staging
+    mkdir -p /Volumes/NAS_1/Xin/openclaw/media/staging/output
     echo "  ✓ NAS folders created:"
     echo "    - recordings/ (audio archival)"
     echo "    - staging/ (remote GPU input/output)"
 else
     echo "  ⚠ NAS not mounted at /Volumes/NAS_1. Skipping NAS folders."
     echo "  Mount your NAS and run:"
-    echo "    mkdir -p /Volumes/NAS_1/xin/openclaw/media/recordings"
-    echo "    mkdir -p /Volumes/NAS_1/xin/openclaw/media/staging/output"
+    echo "    mkdir -p /Volumes/NAS_1/Xin/openclaw/media/recordings"
+    echo "    mkdir -p /Volumes/NAS_1/Xin/openclaw/media/staging/output"
 fi
 
 # Scripts directory

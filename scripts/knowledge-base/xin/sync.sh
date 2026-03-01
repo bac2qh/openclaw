@@ -39,7 +39,7 @@ TRANSCRIPTS_DIR="${BASE_DIR}/transcripts"
 WORKSPACE_DIR="${BASE_DIR}/workspace"
 GDRIVE_TRANSCRIPTS="${HOME}/Insync/bac2qh@gmail.com/Google Drive/openclaw/xin/transcripts"
 GDRIVE_WORKSPACE="${HOME}/Insync/bac2qh@gmail.com/Google Drive/openclaw/xin/workspace"
-NAS_OUTPUT="/Volumes/NAS_1/xin/openclaw/media/staging/output"
+NAS_OUTPUT="/Volumes/NAS_1/Xin/openclaw/media/staging/output"
 
 POLL_INTERVAL=120  # seconds between sync cycles
 

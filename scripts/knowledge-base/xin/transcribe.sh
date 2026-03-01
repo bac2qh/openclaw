@@ -69,7 +69,7 @@ trap 'rm -f "$LOCKFILE"' EXIT
 PYTHON="${HOME}/openclaw/scripts/.venv/bin/python"   # shared
 INPUT_DIR="${BASE_DIR}/media/inbound"
 OUTPUT_DIR="${BASE_DIR}/transcripts"
-NAS_RECORDINGS="/Volumes/NAS_1/xin/openclaw/media/recordings"
+NAS_RECORDINGS="/Volumes/NAS_1/Xin/openclaw/media/recordings"
 FAST_MODEL="mlx-community/whisper-large-v3-turbo-asr-fp16"
 MAX_TOKENS=65536
 
