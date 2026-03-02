@@ -59,7 +59,7 @@ while true; do
 
     CONTENT=$(cat "$file")
 
-    # Extract duration from transcript JSON (last segment's end_time)
+    # Extract duration from transcript JSON (last segment's end)
     DURATION_SECS=$(echo "$CONTENT" | node -e "
       let buf = '';
       process.stdin.setEncoding('utf8');
@@ -68,7 +68,7 @@ while true; do
         try {
           const d = JSON.parse(buf);
           const s = d.segments || [];
-          console.log(s.length ? Math.floor(s[s.length - 1].end_time || 0) : 0);
+          console.log(s.length ? Math.floor(s[s.length - 1].end || 0) : 0);
         } catch { console.log('0'); }
       });
     ")
@@ -118,7 +118,7 @@ $CONTENT" \
               const d = JSON.parse(buf);
               const s = d.segments || [];
               const fullText = s.map(seg => seg.text || '').join(' ');
-              const duration = s.length ? Math.floor(s[s.length - 1].end_time || 0) : 0;
+              const duration = s.length ? Math.floor(s[s.length - 1].end || 0) : 0;
               const speakers = [...new Set(s.map(seg => seg.speaker_id).filter(Boolean))];
               const mins = Math.round(duration / 60);
               const preview = fullText.substring(0, 300);
