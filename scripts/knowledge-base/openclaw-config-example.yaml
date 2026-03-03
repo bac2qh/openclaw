@@ -78,6 +78,27 @@ tools:
 cron:
   enabled: true
 
+# Browser (anti-Cloudflare-detection settings for headless VM)
+#
+# Cloudflare detects --headless=new via TLS fingerprint (JA3/JA4) and JS probes.
+# Running headful Chrome on Xvfb (virtual framebuffer) avoids the headless TLS signature.
+#
+# Prerequisites on Debian/Ubuntu VM:
+#   sudo apt-get install -y xvfb
+#   Xvfb :99 -screen 0 1920x1080x24 &
+#   export DISPLAY=:99
+#
+browser:
+  headless: false        # Run headful against Xvfb; eliminates headless TLS fingerprint
+  noSandbox: true        # Required in VM/container environments
+  extraArgs:
+    - "--window-size=1920,1080"
+    - "--user-agent=Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+    - "--disable-infobars"
+    - "--disable-extensions"
+    - "--use-gl=swiftshader"     # Simulates GPU; reduces fingerprint anomalies
+    - "--disable-features=Translate,MediaRouter,AutomationControlled"
+
 # Gateway
 gateway:
   mode: "local"

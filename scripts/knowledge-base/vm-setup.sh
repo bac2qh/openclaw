@@ -50,6 +50,12 @@ fi
 
 echo "Node.js version: $(node --version)"
 
+# Install Xvfb for headful browser (avoids headless TLS fingerprint detection by Cloudflare)
+echo "Installing Xvfb..."
+if [ "$OS" = "debian" ]; then
+    sudo apt-get install -y xvfb
+fi
+
 # Install pnpm
 echo "Installing pnpm..."
 npm install -g pnpm
@@ -124,6 +130,14 @@ echo "6. Set gateway port (if running multiple instances):"
 echo "   openclaw config set gateway.port 18789  # Default for first user"
 echo "   openclaw config set gateway.port 18790  # For second user"
 echo ""
-echo "7. Start the gateway:"
-echo "   openclaw gateway run"
+echo "7. Start Xvfb virtual display (required for headful browser anti-detection):"
+echo "   Xvfb :99 -screen 0 1920x1080x24 &"
+echo "   export DISPLAY=:99"
+echo ""
+echo "8. Apply browser anti-detection config (see openclaw-config-example.yaml):"
+echo "   openclaw config set browser.headless false"
+echo "   openclaw config set browser.noSandbox true"
+echo ""
+echo "9. Start the gateway:"
+echo "   DISPLAY=:99 openclaw gateway run"
 echo ""
