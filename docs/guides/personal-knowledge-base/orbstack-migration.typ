@@ -10,6 +10,15 @@
   width: 100%,
 )
 
+#block(
+  fill: rgb(255, 220, 180),
+  inset: (x: 9pt, y: 7pt),
+  radius: 3pt,
+  width: 100%,
+)[
+  *Deprecated:* OrbStack mounts your entire Mac home directory read-write into every VM and this cannot be disabled. Use `lima-migration.typ` instead — Lima mounts only `~/openclaw/` and keeps `~/.ssh`, `~/.aws`, and other sensitive directories invisible to the VM.
+]
+
 = Migrate from Lume VM to OrbStack Ubuntu
 
 Migrate your OpenClaw gateway from a Lume VM (Apple Virtualization framework) to an OrbStack Ubuntu machine. OrbStack provides native Linux systemd support, seamless Mac filesystem access, and simpler networking — no VirtioFS quirks.
