@@ -52,8 +52,8 @@ mkdir -p "${BASE_DIR}/config"
 
 # Google Drive (synced to cloud) - workspace + transcripts
 echo "  Creating Google Drive folders..."
-mkdir -p ~/Google\ Drive/My\ Drive/openclaw/zhuoyue/workspace
-mkdir -p ~/Google\ Drive/My\ Drive/openclaw/zhuoyue/transcripts
+mkdir -p ~/My\ Drive/openclaw/zhuoyue/workspace
+mkdir -p ~/My\ Drive/openclaw/zhuoyue/transcripts
 
 # NAS (archival - audio only, staging for remote GPU)
 echo "  Creating NAS folders..."
@@ -106,7 +106,7 @@ echo ""
 echo "Test transcription:"
 echo "  say 'Hello world' -o ${BASE_DIR}/media/inbound/test.aiff"
 echo "  ~/openclaw/scripts/knowledge-base/zhuoyue/transcribe.sh"
-echo "  cat ~/Google\\ Drive/My\\ Drive/openclaw/zhuoyue/transcripts/*test*.json"
+echo "  cat ~/My\\ Drive/openclaw/zhuoyue/transcripts/*test*.json"
 echo ""
 echo "For auto-transcription, install the launchd plist:"
 echo "  cp scripts/knowledge-base/zhuoyue/com.user.transcribe-zhuoyue.plist ~/Library/LaunchAgents/"

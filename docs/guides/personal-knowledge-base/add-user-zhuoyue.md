@@ -46,7 +46,7 @@ scripts/knowledge-base/zhuoyue/host-setup.sh
 - `~/openclaw/zhuoyue/transcripts/` - mlx-audio writes transcripts here
 - `~/openclaw/zhuoyue/workspace/` - Markdown files (synced to Google Drive)
 - `~/openclaw/zhuoyue/config/` - Hotwords and config files
-- `~/Google Drive/My Drive/openclaw/zhuoyue/` - Cloud backup
+- `~/My Drive/openclaw/zhuoyue/` - Cloud backup
 - `/Volumes/NAS_1/Zhuoyue/openclaw/media/recordings/` - Audio archival (if NAS mounted)
 
 ### 1.2 Create Initial MEMORY.md
@@ -134,7 +134,7 @@ ls ~/openclaw/zhuoyue/transcripts/
 cat ~/openclaw/zhuoyue/transcripts/*test*.json
 
 # Check synced to Google Drive
-ls ~/Google\ Drive/My\ Drive/openclaw/zhuoyue/transcripts/
+ls ~/My\ Drive/openclaw/zhuoyue/transcripts/
 
 # Check audio moved to NAS (if mounted)
 ls /Volumes/NAS_1/Zhuoyue/openclaw/media/recordings/
@@ -401,7 +401,7 @@ After completing all steps, verify everything works:
   - [ ] `ls ~/openclaw/zhuoyue/transcripts/`
   - [ ] `ls ~/openclaw/zhuoyue/workspace/`
 - [ ] launchd running: `launchctl list | grep transcribe-zhuoyue`
-- [ ] Google Drive folders exist: `ls ~/Google\ Drive/My\ Drive/openclaw/zhuoyue/`
+- [ ] Google Drive folders exist: `ls ~/My\ Drive/openclaw/zhuoyue/`
 
 ### Transcript Watcher
 - [ ] tmux session running: `tmux ls | grep transcript-watcher-zhuoyue`

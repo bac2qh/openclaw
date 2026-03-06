@@ -42,7 +42,7 @@ else
 fi
 
 # Backup Google Drive data (optional)
-GDRIVE_BASE="${HOME}/Google Drive/My Drive/openclaw/xin"
+GDRIVE_BASE="${HOME}/My Drive/openclaw/xin"
 if [ -d "$GDRIVE_BASE" ]; then
     GDRIVE_SIZE=$(du -sh "$GDRIVE_BASE" 2>/dev/null | cut -f1)
     echo "Google Drive data found ($GDRIVE_SIZE)"

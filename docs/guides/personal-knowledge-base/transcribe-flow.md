@@ -481,7 +481,7 @@ tail -f ~/Library/Logs/com.user.transcribe-audio.err.log
 tail -f /tmp/transcribe.log
 
 # Google Drive sync status
-ls -lh ~/Google\ Drive/My\ Drive/openclaw/transcripts/
+ls -lh ~/My\ Drive/openclaw/transcripts/
 ```
 
 ### Common Issues

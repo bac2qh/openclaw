@@ -15,7 +15,7 @@
 # Requirements:
 #   - rsync (built-in on macOS)
 #   - NAS mounted at /Volumes/NAS_1 (required for transcript collection)
-#   - Google Drive mounted at ~/Google Drive/My Drive
+#   - Google Drive mounted at ~/My Drive
 
 set -euo pipefail
 
@@ -37,8 +37,8 @@ exec 2> >(while IFS= read -r line; do printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%
 # Configuration
 TRANSCRIPTS_DIR="${BASE_DIR}/transcripts"
 WORKSPACE_DIR="${BASE_DIR}/workspace"
-GDRIVE_TRANSCRIPTS="${HOME}/Google Drive/My Drive/openclaw/xin/transcripts"
-GDRIVE_WORKSPACE="${HOME}/Google Drive/My Drive/openclaw/xin/workspace"
+GDRIVE_TRANSCRIPTS="${HOME}/My Drive/openclaw/xin/transcripts"
+GDRIVE_WORKSPACE="${HOME}/My Drive/openclaw/xin/workspace"
 NAS_OUTPUT="/Volumes/NAS_1/Xin/openclaw/media/staging/output"
 
 POLL_INTERVAL=120  # seconds between sync cycles
