@@ -229,7 +229,7 @@ OPENCLAW_STATE_DIR=~/.openclaw-xin \
 │                                                                          │
 │  ┌───────────────────────────────────────────────────────────────────┐  │
 │  │ Google Drive (cloud backup - rsync after transcription)          │  │
-│  │ ~/Insync/bac2qh@gmail.com/Google Drive/openclaw/                 │  │
+│  │ ~/Google Drive/My Drive/openclaw/                                │  │
 │  │ ├── workspace/          (markdown files)                          │  │
 │  │ └── transcripts/        (JSON transcripts)                        │  │
 │  └───────────────────────────────────────────────────────────────────┘  │
@@ -265,7 +265,7 @@ OPENCLAW_STATE_DIR=~/.openclaw-xin \
 └── scripts/
     └── transcribe.sh             # mlx-audio transcription + sync + NAS archival
 
-~/Insync/bac2qh@gmail.com/Google Drive/openclaw/
+~/Google Drive/My Drive/openclaw/
 ├── workspace/                    # Cloud backup of workspace (rsync after transcription)
 └── transcripts/                  # Cloud backup of transcripts (rsync after transcription)
 
@@ -381,8 +381,8 @@ mkdir -p ~/openclaw/${USER_NAME}/transcripts
 mkdir -p ~/openclaw/${USER_NAME}/config
 
 # Google Drive destinations (cloud backup, per-user)
-mkdir -p ~/Insync/bac2qh@gmail.com/Google\ Drive/openclaw/${USER_NAME}/workspace
-mkdir -p ~/Insync/bac2qh@gmail.com/Google\ Drive/openclaw/${USER_NAME}/transcripts
+mkdir -p ~/Google\ Drive/My\ Drive/openclaw/${USER_NAME}/workspace
+mkdir -p ~/Google\ Drive/My\ Drive/openclaw/${USER_NAME}/transcripts
 
 # NAS (archival - audio only, per-user)
 mkdir -p /Volumes/NAS_1/${USER_NAME}/openclaw/media/recordings
@@ -466,7 +466,7 @@ ls ~/openclaw/${USER_NAME}/transcripts/
 cat ~/openclaw/${USER_NAME}/transcripts/*test*.json
 
 # Check transcript was synced to Google Drive
-ls ~/Insync/bac2qh@gmail.com/Google\ Drive/openclaw/${USER_NAME}/transcripts/
+ls ~/Google\ Drive/My\ Drive/openclaw/${USER_NAME}/transcripts/
 
 # Check audio was moved to NAS
 ls /Volumes/NAS_1/${USER_NAME}/openclaw/media/recordings/

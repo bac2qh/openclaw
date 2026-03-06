@@ -358,14 +358,14 @@ Behavior:
 ### Google Drive Not Synced
 
 ```
-Scenario: Insync not running or Google Drive unmounted
+Scenario: Google Drive not running or Google Drive unmounted
 
 Behavior:
 - Transcription proceeds normally
 - Transcripts stay in ~/openclaw/transcripts/
 - Warning logged: "⚠ Google Drive not available, skipping cloud sync"
 - Watcher may not see new transcripts if it reads from GDrive path
-- Fix: Run rsync manually or restart Insync
+- Fix: Run rsync manually or check Google Drive is running
 ```
 
 ### Transcription Failure Mid-Chunk
@@ -424,7 +424,7 @@ Behavior:
 
 | Tool | Purpose | Fallback Behavior |
 |------|---------|-------------------|
-| Insync (Google Drive) | Cloud sync for transcripts | Transcripts stay local-only |
+| Google Drive | Cloud sync for transcripts | Transcripts stay local-only |
 | NAS mount (`/Volumes/NAS_1`) | Audio archival | Original files kept in `~/openclaw/media/inbound/` |
 
 ---
@@ -481,7 +481,7 @@ tail -f ~/Library/Logs/com.user.transcribe-audio.err.log
 tail -f /tmp/transcribe.log
 
 # Google Drive sync status
-ls -lh ~/Insync/bac2qh@gmail.com/Google\ Drive/openclaw/transcripts/
+ls -lh ~/Google\ Drive/My\ Drive/openclaw/transcripts/
 ```
 
 ### Common Issues
