@@ -37,9 +37,11 @@ Save this file as `~/lima-openclaw.yaml` on your Mac:
 
 ```yaml
 vmType: vz
-rosetta:
-  enabled: true
-  binfmt: true
+vmOpts:
+  vz:
+    rosetta:
+      enabled: true
+      binfmt: true
 cpus: 4
 memory: 8GiB
 disk: 50GiB
@@ -638,7 +640,7 @@ sw_vers -productVersion   # Must be 13.0 or higher
 uname -m                  # Must be arm64
 ```
 
-If running macOS 12 or earlier, change `vmType: vz` to `vmType: qemu` in `lima-openclaw.yaml`, remove the `rosetta:` block, and change the image to an `amd64` cloud image.
+If running macOS 12 or earlier, change `vmType: vz` to `vmType: qemu` in `lima-openclaw.yaml`, remove the `vmOpts:` block, and change the image to an `amd64` cloud image.
 
 ### Permission denied on mounted paths
 
